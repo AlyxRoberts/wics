@@ -1,0 +1,10 @@
+# Bundled Python installation
+python/
+
+# Application database
+broadcast_log.db
+
+# PyInstaller output
+build/
+dist/
+*.spec
