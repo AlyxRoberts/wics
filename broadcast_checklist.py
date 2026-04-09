@@ -64,6 +64,10 @@ def init_db():
                 channel_key TEXT    NOT NULL,
                 on_air      INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS operators (
+                id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT    NOT NULL UNIQUE COLLATE NOCASE
+            );
         """)
 
 
@@ -90,6 +94,23 @@ def get_statuses(signoff_id):
             (signoff_id,)
         ).fetchall()
     return {r[0]: bool(r[1]) for r in rows}
+
+
+def get_operators() -> list[str]:
+    with sqlite3.connect(DB_PATH) as c:
+        return [r[0] for r in c.execute(
+            "SELECT name FROM operators ORDER BY name COLLATE NOCASE"
+        ).fetchall()]
+
+
+def add_operator(name: str):
+    with sqlite3.connect(DB_PATH) as c:
+        c.execute("INSERT OR IGNORE INTO operators (name) VALUES (?)", (name.strip(),))
+
+
+def remove_operator(name: str):
+    with sqlite3.connect(DB_PATH) as c:
+        c.execute("DELETE FROM operators WHERE name=?", (name,))
 
 
 def save_signoff(bdate, hour, operator, notes, statuses: dict):
@@ -266,15 +287,24 @@ class App(tk.Tk):
             font=font(11), bg=BG_CARD, fg=TEXT, relief="flat",
             padx=16, pady=6, cursor="hand2",
         )
-        self._btn_hist.pack(side="left")
+        self._btn_hist.pack(side="left", padx=(0, 8))
+        self._btn_ops = tk.Button(
+            nav, text="Operators", command=self.show_operators,
+            font=font(11), bg=BG_CARD, fg=TEXT, relief="flat",
+            padx=16, pady=6, cursor="hand2",
+        )
+        self._btn_ops.pack(side="left")
 
     def _nav_select(self, which):
-        if which == "check":
-            self._btn_check.config(bg=BLUE, fg=BG, font=font(11, bold=True))
-            self._btn_hist.config(bg=BG_CARD, fg=TEXT, font=font(11))
-        else:
-            self._btn_hist.config(bg=BLUE, fg=BG, font=font(11, bold=True))
-            self._btn_check.config(bg=BG_CARD, fg=TEXT, font=font(11))
+        styles = {
+            "check": (self._btn_check, self._btn_hist, self._btn_ops),
+            "hist":  (self._btn_hist,  self._btn_check, self._btn_ops),
+            "ops":   (self._btn_ops,   self._btn_check, self._btn_hist),
+        }
+        active, *inactive = styles[which]
+        active.config(bg=BLUE, fg=BG, font=font(11, bold=True))
+        for btn in inactive:
+            btn.config(bg=BG_CARD, fg=TEXT, font=font(11))
 
     def _clear(self):
         for w in self.content.winfo_children():
@@ -343,10 +373,31 @@ class App(tk.Tk):
         lbl_w = dict(font=font(12), fg=TEXT, bg=BG_CARD)
         ent_w = dict(font=font(12), bg=BG, fg=TEXT, insertbackground=TEXT, relief="flat")
 
+        operators = get_operators()
+
         tk.Label(bar, text="Operator:", **lbl_w).grid(row=0, column=0, sticky="w", padx=(0, 6))
-        self._ent_op = tk.Entry(bar, width=22, **ent_w)
-        self._ent_op.insert(0, prefill_op)
-        self._ent_op.grid(row=0, column=1, padx=(0, 18), ipady=3)
+
+        if operators:
+            self._op_var = tk.StringVar(value=prefill_op if prefill_op in operators else operators[0])
+            self._cmb_op = ttk.Combobox(
+                bar, textvariable=self._op_var, values=operators,
+                state="readonly", width=22, font=font(12),
+            )
+            self._cmb_op.grid(row=0, column=1, padx=(0, 18), ipady=3)
+            self._cmb_op.focus_set()
+        else:
+            # No operators configured yet — show a helpful prompt instead of a blank dropdown
+            tk.Label(
+                bar,
+                text="No operators added yet — go to the Operators tab to add names.",
+                font=font(11), fg=YELLOW, bg=BG_CARD,
+            ).grid(row=0, column=1, columnspan=3, sticky="w", padx=(0, 18))
+            tk.Button(
+                bar, text="Sign Off", state="disabled",
+                font=font(12, bold=True), bg=BG_CARD, fg=SUBTEXT,
+                relief="flat", padx=16, pady=5,
+            ).grid(row=0, column=4)
+            return
 
         tk.Label(bar, text="Notes (optional):", **lbl_w).grid(row=0, column=2, sticky="w", padx=(0, 6))
         self._ent_notes = tk.Entry(bar, width=32, **ent_w)
@@ -360,15 +411,14 @@ class App(tk.Tk):
             relief="flat", padx=16, pady=5, cursor="hand2",
         ).grid(row=0, column=4)
 
-        self._ent_op.focus_set()
         self.bind("<Return>", lambda _e: self._do_signoff(bdate, hour))
 
     def _do_signoff(self, bdate, hour):
         self.unbind("<Return>")
-        op    = self._ent_op.get().strip()
+        op    = self._op_var.get().strip()
         notes = self._ent_notes.get().strip()
         if not op:
-            messagebox.showwarning("Name Required", "Please enter the operator's name before signing off.")
+            messagebox.showwarning("Name Required", "Please select an operator before signing off.")
             self.bind("<Return>", lambda _e: self._do_signoff(bdate, hour))
             return
         statuses = {k: v.get() for k, v in self._ch_vars.items()}
@@ -464,6 +514,88 @@ class App(tk.Tk):
         sf = ScrollFrame(self._hist_body, bg=BG)
         sf.pack(fill="both", expand=True)
         build_station_cards(sf.inner, {}, readonly=True, statuses=statuses)
+
+
+    # ── Operators management view ─────────────────────────────────────────────
+    def show_operators(self):
+        self._nav_select("ops")
+        self._clear()
+
+        tk.Label(
+            self.content, text="Operators",
+            font=font(15, bold=True), fg=TEXT, bg=BG,
+        ).pack(anchor="w", pady=(12, 4))
+        tk.Label(
+            self.content, text="Manage the list of operators who can sign off hourly checks.",
+            font=font(11), fg=SUBTEXT, bg=BG,
+        ).pack(anchor="w", pady=(0, 12))
+
+        # ── Add operator row ──────────────────────────────────────────────────
+        add_row = tk.Frame(self.content, bg=BG_CARD, padx=14, pady=12)
+        add_row.pack(fill="x")
+
+        tk.Label(add_row, text="New operator name:", font=font(12), fg=TEXT, bg=BG_CARD).pack(side="left", padx=(0, 8))
+        self._new_op_entry = tk.Entry(
+            add_row, font=font(12), width=28,
+            bg=BG, fg=TEXT, insertbackground=TEXT, relief="flat",
+        )
+        self._new_op_entry.pack(side="left", padx=(0, 12), ipady=3)
+        self._new_op_entry.focus_set()
+
+        tk.Button(
+            add_row, text="Add",
+            command=self._add_operator,
+            font=font(12, bold=True), bg=BLUE, fg=BG,
+            relief="flat", padx=14, pady=4, cursor="hand2",
+        ).pack(side="left")
+
+        self._new_op_entry.bind("<Return>", lambda _e: self._add_operator())
+
+        # ── Operator list ─────────────────────────────────────────────────────
+        self._ops_list_frame = tk.Frame(self.content, bg=BG)
+        self._ops_list_frame.pack(fill="both", expand=True, pady=(12, 0))
+        self._refresh_operators_list()
+
+    def _refresh_operators_list(self):
+        for w in self._ops_list_frame.winfo_children():
+            w.destroy()
+
+        operators = get_operators()
+        if not operators:
+            tk.Label(
+                self._ops_list_frame,
+                text="No operators added yet.",
+                font=font(12), fg=SUBTEXT, bg=BG,
+            ).pack(pady=20)
+            return
+
+        for name in operators:
+            row = tk.Frame(self._ops_list_frame, bg=BG_CARD, padx=14, pady=8)
+            row.pack(fill="x", pady=3)
+            tk.Label(row, text=name, font=font(12), fg=TEXT, bg=BG_CARD).pack(side="left")
+            tk.Button(
+                row, text="Remove",
+                command=lambda n=name: self._remove_operator(n),
+                font=font(10), bg=RED, fg=BG,
+                relief="flat", padx=10, pady=2, cursor="hand2",
+            ).pack(side="right")
+
+    def _add_operator(self):
+        name = self._new_op_entry.get().strip()
+        if not name:
+            return
+        if name in get_operators():
+            messagebox.showwarning("Duplicate", f'"{name}" is already in the list.')
+            return
+        add_operator(name)
+        self._new_op_entry.delete(0, tk.END)
+        self._refresh_operators_list()
+
+    def _remove_operator(self, name):
+        if not messagebox.askyesno("Remove Operator", f'Remove "{name}" from the operator list?'):
+            return
+        remove_operator(name)
+        self._refresh_operators_list()
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
