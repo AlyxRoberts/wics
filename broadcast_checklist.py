@@ -23,7 +23,14 @@ STATIONS = [
 
 BROADCAST_START_HOUR = 5  # 5:00 AM
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "broadcast_log.db")
+# Resolve the folder that contains the running script or .exe so the database
+# is always stored next to the application, not in a temp directory.
+import sys as _sys
+if getattr(_sys, "frozen", False):
+    _app_dir = os.path.dirname(_sys.executable)
+else:
+    _app_dir = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(_app_dir, "broadcast_log.db")
 
 # ── Broadcast-order hour list (5am first, 4am last) ────────────────────────────
 BCAST_HOURS = list(range(BROADCAST_START_HOUR, 24)) + list(range(0, BROADCAST_START_HOUR))
