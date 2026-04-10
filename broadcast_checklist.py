@@ -317,8 +317,10 @@ class App(tk.Tk):
 
     # ── Header ────────────────────────────────────────────────────────────────
     def _apply_ttk_style(self):
-        """Apply dark theme to all ttk widgets (primarily Combobox)."""
+        """Apply dark theme to all ttk widgets (primarily Combobox).
+        Must use 'clam' theme — the Windows-native theme ignores custom colours."""
         style = ttk.Style()
+        style.theme_use("clam")
         style.configure("TCombobox",
             fieldbackground=BG_CARD,
             background=BG_CARD,
