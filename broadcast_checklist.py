@@ -369,7 +369,7 @@ class App(tk.Tk):
 
         date_lbl = tk.Label(
             nav_bar, text=view_date.strftime("%A, %B %d, %Y"),
-            font=font(13, bold=True), fg=BLUE, bg=BG_HDR, cursor="hand2",
+            font=font(18, bold=True), fg=BLUE, bg=BG_HDR, cursor="hand2",
         )
         date_lbl.grid(row=0, column=1)
         date_lbl.bind("<Button-1>", self._open_date_picker)
@@ -420,13 +420,13 @@ class App(tk.Tk):
         hkw = dict(bg=BG_HDR, fg=TEXT, padx=2, pady=3, relief="flat")
 
         # Header row 0 — station group names
-        tk.Label(parent, text="Time", font=font(9, bold=True), **hkw).grid(
+        tk.Label(parent, text="Time", font=font(18, bold=True), **hkw).grid(
             row=0, column=COL_TIME, sticky="nsew", padx=1, pady=1)
         for stn_id, span, start in STATION_SPANS:
             lpad = 6 if start in GROUP_DIVIDER_COLS else 1
-            tk.Label(parent, text=stn_id, font=font(9, bold=True), **hkw).grid(
+            tk.Label(parent, text=stn_id, font=font(18, bold=True), **hkw).grid(
                 row=0, column=start, columnspan=span, sticky="nsew", padx=(lpad, 1), pady=1)
-        tk.Label(parent, text="Employee", font=font(9, bold=True), **hkw).grid(
+        tk.Label(parent, text="Employee", font=font(18, bold=True), **hkw).grid(
             row=0, column=COL_EMPLOYEE, sticky="nsew", padx=(6, 1), pady=1)
         tk.Label(parent, text="", bg=BG_HDR).grid(
             row=0, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
@@ -437,7 +437,7 @@ class App(tk.Tk):
         for i, (_, short) in enumerate(CHANNEL_COLS):
             col_idx = COL_CHAN_START + i
             lpad = 6 if col_idx in GROUP_DIVIDER_COLS else 1
-            tk.Label(parent, text=short, font=font(8), **hkw).grid(
+            tk.Label(parent, text=short, font=font(16), **hkw).grid(
                 row=1, column=col_idx, sticky="nsew", padx=(lpad, 1), pady=1)
         tk.Label(parent, text="", **hkw).grid(
             row=1, column=COL_EMPLOYEE, sticky="nsew", padx=(6, 1), pady=1)
