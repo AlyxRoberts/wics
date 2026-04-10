@@ -170,6 +170,28 @@ def remove_operator(name):
         c.execute("DELETE FROM operators WHERE name=?", (name,))
 
 
+def rename_operator(old_name, new_name):
+    """Rename an operator without touching any historical sign-off records."""
+    with sqlite3.connect(DB_PATH) as c:
+        c.execute("UPDATE operators SET name=? WHERE name=?",
+                  (new_name.strip(), old_name))
+
+
+def get_previous_row_statuses(view_date, hour_idx):
+    """Return statuses from the closest signed row before hour_idx.
+    Falls back to the previous broadcast day's last signed row if needed."""
+    for i in range(hour_idx - 1, -1, -1):
+        row = get_signoff(view_date, BCAST_HOURS[i])
+        if row:
+            return get_statuses(row[0])
+    prev = view_date - datetime.timedelta(days=1)
+    for hour in reversed(BCAST_HOURS):
+        row = get_signoff(prev, hour)
+        if row:
+            return get_statuses(row[0])
+    return None
+
+
 # ── ThreeStateCell ─────────────────────────────────────────────────────────────
 # States: 0 = Unknown (□), 1 = On Air (✔), 2 = Off Air (✘)
 _CELL_CFG = {
@@ -183,9 +205,11 @@ class ThreeStateCell(tk.Label):
     def __init__(self, parent, var, row_bg, readonly=False, **kw):
         self._var    = var
         self._row_bg = row_bg
-        super().__init__(parent, font=font(11, bold=True), anchor="center",
-                         padx=6, pady=5, **kw)
+        super().__init__(parent, font=font(10, bold=True), anchor="center",
+                         padx=3, pady=2, **kw)
         self._refresh()
+        # React immediately when var is set externally (e.g. copy-previous-row)
+        self._var.trace_add("write", lambda *_: self.after_idle(self._refresh))
         if not readonly:
             self.bind("<Button-1>", self._cycle)
             self.config(cursor="hand2")
@@ -258,6 +282,7 @@ class App(tk.Tk):
 
         self._build_header()
         self._build_nav()
+        self.bind("<Control-o>", lambda _: self.show_operators())
 
         self.content = tk.Frame(self, bg=BG)
         self.content.pack(fill="both", expand=True)
@@ -297,19 +322,13 @@ class App(tk.Tk):
             font=font(11, bold=True), bg=BLUE, fg=BG,
             relief="flat", padx=16, pady=6, cursor="hand2",
         )
-        self._btn_check.pack(side="left", padx=(0, 8))
-        self._btn_ops = tk.Button(
-            nav, text="Operators", command=self.show_operators,
-            font=font(11), bg=BG_CARD, fg=TEXT,
-            relief="flat", padx=16, pady=6, cursor="hand2",
-        )
-        self._btn_ops.pack(side="left")
+        self._btn_check.pack(side="left")
 
     def _nav_select(self, which):
-        active   = self._btn_check if which == "check" else self._btn_ops
-        inactive = self._btn_ops   if which == "check" else self._btn_check
-        active.config(bg=BLUE,    fg=BG,   font=font(11, bold=True))
-        inactive.config(bg=BG_CARD, fg=TEXT, font=font(11))
+        if which == "check":
+            self._btn_check.config(bg=BLUE, fg=BG, font=font(11, bold=True))
+        else:
+            self._btn_check.config(bg=BG_CARD, fg=TEXT, font=font(11))
 
     def _clear(self):
         for w in self.content.winfo_children():
@@ -322,11 +341,13 @@ class App(tk.Tk):
         self._nav_select("check")
         self._clear()
 
-        today = broadcast_date(datetime.datetime.now())
+        today     = broadcast_date(datetime.datetime.now())
+        yesterday = today - datetime.timedelta(days=1)
         if view_date is None:
             view_date = today
         self._view_date = view_date
-        is_today = (view_date == today)
+        is_today    = (view_date == today)
+        is_editable = (view_date >= yesterday)   # today and yesterday are editable
 
         # Date navigation bar
         nav_bar = tk.Frame(self.content, bg=BG_HDR, pady=6)
@@ -356,32 +377,31 @@ class App(tk.Tk):
             activebackground=BG_CARD,
         ).grid(row=0, column=2, padx=(4, 14))
 
-        # Scrollable grid
+        # Non-scrolling grid that expands to fill the window
         self.content.rowconfigure(1, weight=1)
-        sf = ScrollFrame(self.content, bg=BG_BORDER, expand_width=True)
-        sf.grid(row=1, column=0, sticky="nsew")
-        self._sf = sf
+        grid_frame = tk.Frame(self.content, bg=BG_BORDER)
+        grid_frame.grid(row=1, column=0, sticky="nsew")
 
-        self._build_grid(sf.inner, view_date, is_today)
+        self._build_grid(grid_frame, view_date, is_today, is_editable)
 
-        if is_today:
-            cur_idx   = BCAST_HOURS.index(datetime.datetime.now().hour)
-            total     = len(BCAST_HOURS) + 2
-            fraction  = max(0.0, (cur_idx) / total)
-            self.after(150, lambda: sf.canvas.yview_moveto(fraction))
-
-    def _build_grid(self, parent, view_date, is_today):
+    def _build_grid(self, parent, view_date, is_today, is_editable):
         now_hour  = datetime.datetime.now().hour
         operators = get_operators()
 
-        # Column weights
-        parent.columnconfigure(COL_TIME, weight=0, minsize=66)
+        # Column weights — all columns share available width proportionally
+        parent.columnconfigure(COL_TIME, weight=0, minsize=64)
         for c in range(COL_CHAN_START, COL_EMPLOYEE):
-            parent.columnconfigure(c, weight=1, minsize=44)
-        parent.columnconfigure(COL_EMPLOYEE, weight=3, minsize=120)
-        parent.columnconfigure(COL_SIGNOFF,  weight=0, minsize=84)
+            parent.columnconfigure(c, weight=1, minsize=40)
+        parent.columnconfigure(COL_EMPLOYEE, weight=3, minsize=115)
+        parent.columnconfigure(COL_SIGNOFF,  weight=0, minsize=80)
 
-        hkw = dict(bg=BG_HDR, fg=TEXT, padx=3, pady=5, relief="flat")
+        # Row weights — headers are compact; 24 data rows share all remaining height
+        parent.rowconfigure(0, weight=0, minsize=20)
+        parent.rowconfigure(1, weight=0, minsize=18)
+        for i in range(2, 2 + len(BCAST_HOURS)):
+            parent.rowconfigure(i, weight=1, minsize=20)
+
+        hkw = dict(bg=BG_HDR, fg=TEXT, padx=2, pady=3, relief="flat")
 
         # Header row 0 — station group names
         tk.Label(parent, text="Time", font=font(9, bold=True), **hkw).grid(
@@ -409,25 +429,27 @@ class App(tk.Tk):
         self._row_op_var = {}
 
         for row_idx, hour in enumerate(BCAST_HOURS):
-            grid_row   = row_idx + 2
-            is_current = is_today and (hour == now_hour)
-            row_bg     = BG_CUR if is_current else (BG_ROW_A if row_idx % 2 == 0 else BG_ROW_B)
-
+            grid_row         = row_idx + 2
+            is_current       = is_today and (hour == now_hour)
+            row_bg           = BG_CUR if is_current else (BG_ROW_A if row_idx % 2 == 0 else BG_ROW_B)
             edit_mode        = hour in self._editing_hours
             existing         = get_signoff(view_date, hour)
-            signed           = existing is not None
-            effective_signed = signed and not edit_mode
+            effective_signed = (existing is not None) and not edit_mode
             prior            = get_statuses(existing[0]) if existing else {}
-            readonly_cell    = effective_signed or not is_today
+            readonly_cell    = effective_signed or not is_editable
 
             ckw = dict(bg=row_bg, relief="flat")
 
-            # Time label
-            hour_str = datetime.time(hour, 0).strftime("%I:%M %p").lstrip("0")
-            tk.Label(parent, text=hour_str, font=font(9, bold=is_current),
-                     fg=(BLUE if is_current else TEXT),
-                     anchor="center", padx=6, **ckw).grid(
-                row=grid_row, column=COL_TIME, sticky="nsew", padx=1, pady=1)
+            # Time label — clicking on an editable unsigned row copies the previous row
+            hour_str  = datetime.time(hour, 0).strftime("%I:%M %p").lstrip("0")
+            time_lbl  = tk.Label(parent, text=hour_str, font=font(9, bold=is_current),
+                                 fg=(BLUE if is_current else TEXT),
+                                 anchor="center", padx=4, **ckw)
+            time_lbl.grid(row=grid_row, column=COL_TIME, sticky="nsew", padx=1, pady=1)
+            if is_editable and not effective_signed:
+                time_lbl.config(cursor="hand2")
+                time_lbl.bind("<Button-1>",
+                              lambda _e, h=hour, idx=row_idx: self._copy_prev_row(h, idx))
 
             # Channel cells
             self._row_vars[hour] = {}
@@ -440,43 +462,40 @@ class App(tk.Tk):
 
             # Employee + sign-off columns
             if effective_signed:
-                op_name = existing[1]
-                sat_fmt = datetime.datetime.fromisoformat(existing[3]).strftime("%I:%M %p")
-                tk.Label(parent, text=f"{op_name}  \u2022  {sat_fmt}",
-                         font=font(9), fg=GREEN, anchor="w", padx=6, **ckw).grid(
+                tk.Label(parent, text=existing[1],
+                         font=font(9), fg=GREEN, anchor="w", padx=4, **ckw).grid(
                     row=grid_row, column=COL_EMPLOYEE, sticky="nsew", padx=1, pady=1)
-                if is_today:
+                if is_editable:
                     tk.Button(parent, text="Edit",
                               command=lambda h=hour: self._edit_row(h),
                               font=font(9), bg="#263326", fg=GREEN,
-                              relief="flat", cursor="hand2", padx=8).grid(
+                              relief="flat", cursor="hand2", padx=6).grid(
                         row=grid_row, column=COL_SIGNOFF,
                         sticky="nsew", padx=2, pady=2)
                 else:
                     tk.Label(parent, text="", **ckw).grid(
                         row=grid_row, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
 
-            elif is_today:
+            elif is_editable:
                 if operators:
-                    op_var = tk.StringVar()
+                    # No default selection — operator must actively choose
+                    op_var = tk.StringVar(value="")
                     if edit_mode and existing and existing[1] in operators:
                         op_var.set(existing[1])
-                    else:
-                        op_var.set(operators[0])
                     self._row_op_var[hour] = op_var
                     ttk.Combobox(parent, textvariable=op_var, values=operators,
                                  state="readonly", font=font(9)).grid(
                         row=grid_row, column=COL_EMPLOYEE,
-                        sticky="ew", padx=3, pady=4)
+                        sticky="ew", padx=2, pady=3)
                     tk.Button(parent, text="Sign Off",
                               command=lambda h=hour: self._sign_off_row(h),
                               font=font(9, bold=True), bg="#1a331a", fg=GREEN,
-                              relief="flat", cursor="hand2", padx=8).grid(
+                              relief="flat", cursor="hand2", padx=6).grid(
                         row=grid_row, column=COL_SIGNOFF,
                         sticky="nsew", padx=2, pady=2)
                 else:
                     tk.Label(parent, text="Add operators first",
-                             font=font(9), fg=YELLOW, anchor="w", padx=6, **ckw).grid(
+                             font=font(9), fg=YELLOW, anchor="w", padx=4, **ckw).grid(
                         row=grid_row, column=COL_EMPLOYEE, columnspan=2,
                         sticky="nsew", padx=1, pady=1)
             else:
@@ -500,6 +519,15 @@ class App(tk.Tk):
     def _edit_row(self, hour):
         self._editing_hours.add(hour)
         self.show_day_view(self._view_date)
+
+    def _copy_prev_row(self, hour, hour_idx):
+        """Copy channel states from the closest previously signed row into this row."""
+        prev = get_previous_row_statuses(self._view_date, hour_idx)
+        if prev is None:
+            return
+        for chan_key, var in self._row_vars.get(hour, {}).items():
+            var.set(prev.get(chan_key, 0))
+        # ThreeStateCell traces on the vars will auto-refresh their display
 
     # ── Date navigation ───────────────────────────────────────────────────────
     def _prev_day(self):
@@ -547,7 +575,7 @@ class App(tk.Tk):
 
         cmb.bind("<<ComboboxSelected>>", lambda _e: go())
 
-    # ── Operators management ──────────────────────────────────────────────────
+    # ── Operators management (Ctrl+O) ─────────────────────────────────────────
     def show_operators(self):
         self._nav_select("ops")
         self._clear()
@@ -559,7 +587,8 @@ class App(tk.Tk):
 
         tk.Label(wrapper, text="Operators",
                  font=font(15, bold=True), fg=TEXT, bg=BG).pack(anchor="w", pady=(0, 4))
-        tk.Label(wrapper, text="Manage the list of operators who can sign off hourly checks.",
+        tk.Label(wrapper,
+                 text="Renaming an operator does not change their name on past sign-offs.",
                  font=font(11), fg=SUBTEXT, bg=BG).pack(anchor="w", pady=(0, 12))
 
         add_row = tk.Frame(wrapper, bg=BG_CARD, padx=14, pady=12)
@@ -595,6 +624,10 @@ class App(tk.Tk):
                       command=lambda n=name: self._remove_operator(n),
                       font=font(10), bg=RED, fg=BG,
                       relief="flat", padx=10, pady=2, cursor="hand2").pack(side="right")
+            tk.Button(row, text="Rename",
+                      command=lambda n=name: self._rename_operator_prompt(n),
+                      font=font(10), bg=BG_CARD, fg=BLUE,
+                      relief="flat", padx=10, pady=2, cursor="hand2").pack(side="right", padx=6)
 
     def _add_operator(self):
         name = self._new_op_entry.get().strip()
@@ -609,10 +642,51 @@ class App(tk.Tk):
 
     def _remove_operator(self, name):
         if not messagebox.askyesno("Remove Operator",
-                                   f'Remove "{name}" from the operator list?'):
+                                   f'Remove "{name}" from the operator list?\n\n'
+                                   f'Their name will remain on any existing sign-offs.'):
             return
         remove_operator(name)
         self._refresh_operators_list()
+
+    def _rename_operator_prompt(self, old_name):
+        popup = tk.Toplevel(self)
+        popup.title("Rename Operator")
+        popup.configure(bg=BG)
+        popup.resizable(False, False)
+        popup.transient(self)
+        popup.grab_set()
+        self.update_idletasks()
+        x = self.winfo_x() + self.winfo_width()  // 2 - 155
+        y = self.winfo_y() + self.winfo_height() // 2 - 55
+        popup.geometry(f"310x110+{x}+{y}")
+
+        tk.Label(popup, text=f'Rename  "{old_name}"  to:',
+                 font=font(11), fg=TEXT, bg=BG).pack(pady=(12, 4))
+        var   = tk.StringVar(value=old_name)
+        entry = tk.Entry(popup, textvariable=var, font=font(11), width=26,
+                         bg=BG_CARD, fg=TEXT, insertbackground=TEXT, relief="flat")
+        entry.pack(pady=2, ipady=3)
+        entry.select_range(0, tk.END)
+        entry.focus_set()
+
+        def do_rename():
+            new_name = var.get().strip()
+            if not new_name or new_name == old_name:
+                popup.destroy()
+                return
+            existing = [op.lower() for op in get_operators() if op != old_name]
+            if new_name.lower() in existing:
+                messagebox.showwarning("Duplicate",
+                                       f'"{new_name}" already exists.', parent=popup)
+                return
+            rename_operator(old_name, new_name)
+            popup.destroy()
+            self._refresh_operators_list()
+
+        entry.bind("<Return>", lambda _: do_rename())
+        tk.Button(popup, text="Rename", command=do_rename,
+                  font=font(11, bold=True), bg=BLUE, fg=BG,
+                  relief="flat", padx=14, pady=4, cursor="hand2").pack(pady=6)
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
