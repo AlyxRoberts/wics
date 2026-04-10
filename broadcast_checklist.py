@@ -302,6 +302,7 @@ class App(tk.Tk):
         self._view_date     = None
         self._last_hour     = -1
 
+        self._apply_ttk_style()
         self._build_header()
         self.bind("<Control-o>", lambda _: self.show_operators())
         self.bind("<F11>", self._toggle_fullscreen)
@@ -315,6 +316,31 @@ class App(tk.Tk):
         self._tick()
 
     # ── Header ────────────────────────────────────────────────────────────────
+    def _apply_ttk_style(self):
+        """Apply dark theme to all ttk widgets (primarily Combobox)."""
+        style = ttk.Style()
+        style.configure("TCombobox",
+            fieldbackground=BG_CARD,
+            background=BG_CARD,
+            foreground=TEXT,
+            arrowcolor=TEXT,
+            insertcolor=TEXT,
+            selectbackground=BLUE,
+            selectforeground=BG,
+        )
+        style.map("TCombobox",
+            fieldbackground=[("readonly", BG_CARD), ("disabled", BG)],
+            foreground=[("readonly", TEXT), ("disabled", DIM)],
+            selectbackground=[("readonly", BG_CARD)],
+            selectforeground=[("readonly", TEXT)],
+        )
+        # Style the dropdown listbox popup
+        self.option_add("*TCombobox*Listbox.background",       BG_CARD)
+        self.option_add("*TCombobox*Listbox.foreground",       TEXT)
+        self.option_add("*TCombobox*Listbox.selectBackground", BLUE)
+        self.option_add("*TCombobox*Listbox.selectForeground", BG)
+        self.option_add("*TCombobox*Listbox.relief",           "flat")
+
     def _build_header(self):
         hdr = tk.Frame(self, bg=BG_HDR, pady=10)
         hdr.pack(fill="x")
