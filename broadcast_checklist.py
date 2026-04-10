@@ -196,18 +196,19 @@ def rename_operator(old_name, new_name):
 
 
 def get_previous_row_statuses(view_date, hour_idx):
-    """Return statuses from the closest signed row before hour_idx.
-    Falls back to the previous broadcast day's last signed row if needed."""
+    """Return (statuses, operator_name) from the closest signed row before hour_idx.
+    Falls back to the previous broadcast day's last signed row if needed.
+    Returns (None, None) if no previous row exists."""
     for i in range(hour_idx - 1, -1, -1):
         row = get_signoff(view_date, BCAST_HOURS[i])
         if row:
-            return get_statuses(row[0])
+            return get_statuses(row[0]), row[1]
     prev = view_date - datetime.timedelta(days=1)
     for hour in reversed(BCAST_HOURS):
         row = get_signoff(prev, hour)
         if row:
-            return get_statuses(row[0])
-    return None
+            return get_statuses(row[0]), row[1]
+    return None, None
 
 
 # ── ThreeStateCell ─────────────────────────────────────────────────────────────
@@ -524,13 +525,17 @@ class App(tk.Tk):
         self.show_day_view(self._view_date)
 
     def _copy_prev_row(self, hour, hour_idx):
-        """Copy channel states from the closest previously signed row into this row."""
-        prev = get_previous_row_statuses(self._view_date, hour_idx)
-        if prev is None:
+        """Copy channel states and operator from the closest previously signed row."""
+        prev_statuses, prev_operator = get_previous_row_statuses(self._view_date, hour_idx)
+        if prev_statuses is None:
             return
         for chan_key, var in self._row_vars.get(hour, {}).items():
-            var.set(prev.get(chan_key, 0))
-        # ThreeStateCell traces on the vars will auto-refresh their display
+            var.set(prev_statuses.get(chan_key, 0))
+        # Copy operator if the previous row had one and this row's dropdown exists
+        if prev_operator:
+            op_var = self._row_op_var.get(hour)
+            if op_var is not None:
+                op_var.set(prev_operator)
 
     # ── Date navigation ───────────────────────────────────────────────────────
     def _prev_day(self):
