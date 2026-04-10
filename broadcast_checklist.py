@@ -500,7 +500,7 @@ class App(tk.Tk):
         # Employee + sign-off columns
         if effective_signed:
             op_lbl = tk.Label(parent, text=existing[1],
-                              font=font(9), fg=GREEN, anchor="w", padx=4, **ckw)
+                              font=font(9), fg=GREEN, anchor="center", padx=4, **ckw)
             op_lbl.grid(row=grid_row, column=COL_EMPLOYEE, sticky="nsew", padx=1, pady=1)
             wlist.append(op_lbl)
             self._scalable_widgets.append((op_lbl, False))
