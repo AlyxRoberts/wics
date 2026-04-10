@@ -866,9 +866,9 @@ def _verify_auth():
         _r = tk.Tk()
         _r.withdraw()
         messagebox.showerror(
-            "Unlicensed",
-            "This copy of OTA Checklist is not licensed to run on this system.\n\n"
-            "Contact alyx.bor@gmail.com for licensing information."
+            "ERROR: ",
+            "There was a problem running the program.\n\n"
+            "Contact Alyx for help."
         )
         _r.destroy()
         _sys.exit(1)
