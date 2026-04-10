@@ -221,9 +221,10 @@ _CELL_CFG = {
 
 
 class ThreeStateCell(tk.Label):
-    def __init__(self, parent, var, row_bg, readonly=False, **kw):
-        self._var    = var
-        self._row_bg = row_bg
+    def __init__(self, parent, var, row_bg, readonly=False, warn_unknown=False, **kw):
+        self._var          = var
+        self._row_bg       = row_bg
+        self._warn_unknown = warn_unknown
         super().__init__(parent, font=font(10, bold=True), anchor="center",
                          padx=3, pady=2, **kw)
         self._refresh()
@@ -239,6 +240,8 @@ class ThreeStateCell(tk.Label):
 
     def _refresh(self):
         sym, fg, bg = _CELL_CFG[self._var.get()]
+        if self._var.get() == 0 and self._warn_unknown:
+            fg, bg = YELLOW, "#2e2800"   # yellow tint for unverified cells in signed rows
         self.config(text=sym, fg=fg, bg=bg if bg else self._row_bg)
 
 
@@ -339,6 +342,7 @@ class App(tk.Tk):
     # ── Day view ──────────────────────────────────────────────────────────────
     def show_day_view(self, view_date=None):
         self._clear()
+        self._scalable_widgets = []   # reset here so nav + grid widgets share one list
 
         today     = broadcast_date(datetime.datetime.now())
         yesterday = today - datetime.timedelta(days=1)
@@ -353,11 +357,13 @@ class App(tk.Tk):
         nav_bar.grid(row=0, column=0, sticky="ew")
         nav_bar.columnconfigure(1, weight=1)
 
-        tk.Button(
+        left_btn = tk.Button(
             nav_bar, text="◀", command=self._prev_day,
             font=font(13), bg=BG_HDR, fg=TEXT, relief="flat",
             padx=14, pady=2, cursor="hand2", activebackground=BG_CARD,
-        ).grid(row=0, column=0, padx=(14, 4))
+        )
+        left_btn.grid(row=0, column=0, padx=(14, 4))
+        self._scalable_widgets.append((left_btn, False))
 
         date_lbl = tk.Label(
             nav_bar, text=view_date.strftime("%A, %B %d, %Y"),
@@ -365,8 +371,9 @@ class App(tk.Tk):
         )
         date_lbl.grid(row=0, column=1)
         date_lbl.bind("<Button-1>", self._open_date_picker)
+        self._scalable_widgets.append((date_lbl, True))
 
-        tk.Button(
+        right_btn = tk.Button(
             nav_bar, text="▶", command=self._next_day,
             font=font(13),
             bg=BG_HDR, fg=(DIM if is_today else TEXT),
@@ -374,7 +381,9 @@ class App(tk.Tk):
             cursor=("" if is_today else "hand2"),
             state=("disabled" if is_today else "normal"),
             activebackground=BG_CARD,
-        ).grid(row=0, column=2, padx=(4, 14))
+        )
+        right_btn.grid(row=0, column=2, padx=(4, 14))
+        self._scalable_widgets.append((right_btn, False))
 
         # Non-scrolling grid that expands to fill the window
         self.content.rowconfigure(1, weight=1)
@@ -384,8 +393,14 @@ class App(tk.Tk):
         self._build_grid(grid_frame, view_date, is_today, is_editable)
 
     def _build_grid(self, parent, view_date, is_today, is_editable):
-        now_hour  = datetime.datetime.now().hour
-        operators = get_operators()
+        # Store context so individual rows can be rebuilt without a full redraw
+        self._grid_parent  = parent
+        self._is_today     = is_today
+        self._is_editable  = is_editable
+        self._operators    = get_operators()
+        self._row_widgets  = {}   # {hour: [widgets]} for targeted rebuild
+        self._row_vars     = {}
+        self._row_op_var   = {}
 
         # Column weights — all columns share available width proportionally
         parent.columnconfigure(COL_TIME, weight=0, minsize=64)
@@ -427,86 +442,150 @@ class App(tk.Tk):
         tk.Label(parent, text="", bg=BG_HDR).grid(
             row=1, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
 
-        self._row_vars   = {}
-        self._row_op_var = {}
-
         for row_idx, hour in enumerate(BCAST_HOURS):
-            grid_row         = row_idx + 2
-            is_current       = is_today and (hour == now_hour)
-            row_bg           = BG_CUR if is_current else (BG_ROW_A if row_idx % 2 == 0 else BG_ROW_B)
-            edit_mode        = hour in self._editing_hours
-            existing         = get_signoff(view_date, hour)
-            effective_signed = (existing is not None) and not edit_mode
-            prior            = get_statuses(existing[0]) if existing else {}
-            readonly_cell    = effective_signed or not is_editable
+            self._build_row(hour, row_idx)
 
-            ckw = dict(bg=row_bg, relief="flat")
+        parent.bind("<Configure>", self._on_grid_configure)
 
-            # Time label — clicking on an editable unsigned row copies the previous row
-            hour_str  = datetime.time(hour, 0).strftime("%I:%M %p").lstrip("0")
-            time_lbl  = tk.Label(parent, text=hour_str, font=font(9, bold=is_current),
-                                 fg=(BLUE if is_current else TEXT),
-                                 anchor="center", padx=4, **ckw)
-            time_lbl.grid(row=grid_row, column=COL_TIME, sticky="nsew", padx=1, pady=1)
-            if is_editable and not effective_signed:
-                time_lbl.config(cursor="hand2")
-                time_lbl.bind("<Button-1>",
-                              lambda _e, h=hour, idx=row_idx: self._copy_prev_row(h, idx))
+    def _build_row(self, hour, row_idx):
+        """Build (or rebuild) a single data row. Appends new widgets to _scalable_widgets."""
+        parent       = self._grid_parent
+        view_date    = self._view_date
+        is_today     = self._is_today
+        is_editable  = self._is_editable
+        operators    = self._operators
+        now_hour     = datetime.datetime.now().hour
 
-            # Channel cells
-            self._row_vars[hour] = {}
-            for i, (chan_key, _) in enumerate(CHANNEL_COLS):
-                col_idx = COL_CHAN_START + i
-                lpad    = 6 if col_idx in GROUP_DIVIDER_COLS else 1
-                var = tk.IntVar(value=prior.get(chan_key, 0))
-                self._row_vars[hour][chan_key] = var
-                ThreeStateCell(parent, var, row_bg=row_bg, readonly=readonly_cell).grid(
-                    row=grid_row, column=col_idx,
-                    sticky="nsew", padx=(lpad, 1), pady=1)
+        grid_row         = row_idx + 2
+        is_current       = is_today and (hour == now_hour)
+        row_bg           = BG_CUR if is_current else (BG_ROW_A if row_idx % 2 == 0 else BG_ROW_B)
+        edit_mode        = hour in self._editing_hours
+        existing         = get_signoff(view_date, hour)
+        effective_signed = (existing is not None) and not edit_mode
+        prior            = get_statuses(existing[0]) if existing else {}
+        readonly_cell    = effective_signed or not is_editable
 
-            # Employee + sign-off columns
-            if effective_signed:
-                tk.Label(parent, text=existing[1],
-                         font=font(9), fg=GREEN, anchor="w", padx=4, **ckw).grid(
-                    row=grid_row, column=COL_EMPLOYEE, sticky="nsew", padx=1, pady=1)
-                if is_editable:
-                    tk.Button(parent, text="Edit",
-                              command=lambda h=hour: self._edit_row(h),
-                              font=font(9), bg="#263326", fg=GREEN,
-                              relief="flat", cursor="hand2", padx=6).grid(
-                        row=grid_row, column=COL_SIGNOFF,
-                        sticky="nsew", padx=2, pady=2)
-                else:
-                    tk.Label(parent, text="", **ckw).grid(
-                        row=grid_row, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
+        ckw   = dict(bg=row_bg, relief="flat")
+        wlist = []   # widgets belonging to this row (for targeted teardown)
 
-            elif is_editable:
-                if operators:
-                    # No default selection — operator must actively choose
-                    op_var = tk.StringVar(value="")
-                    if edit_mode and existing and existing[1] in operators:
-                        op_var.set(existing[1])
-                    self._row_op_var[hour] = op_var
-                    ttk.Combobox(parent, textvariable=op_var, values=operators,
-                                 state="readonly", font=font(9)).grid(
-                        row=grid_row, column=COL_EMPLOYEE,
-                        sticky="ew", padx=2, pady=3)
-                    tk.Button(parent, text="Sign Off",
-                              command=lambda h=hour: self._sign_off_row(h),
-                              font=font(9, bold=True), bg="#1a331a", fg=GREEN,
-                              relief="flat", cursor="hand2", padx=6).grid(
-                        row=grid_row, column=COL_SIGNOFF,
-                        sticky="nsew", padx=2, pady=2)
-                else:
-                    tk.Label(parent, text="Add operators first",
-                             font=font(9), fg=YELLOW, anchor="w", padx=4, **ckw).grid(
-                        row=grid_row, column=COL_EMPLOYEE, columnspan=2,
-                        sticky="nsew", padx=1, pady=1)
+        # Time label
+        hour_str = datetime.time(hour, 0).strftime("%I:%M %p").lstrip("0")
+        time_lbl = tk.Label(parent, text=hour_str, font=font(9, bold=is_current),
+                            fg=(BLUE if is_current else TEXT),
+                            anchor="center", padx=4, **ckw)
+        time_lbl.grid(row=grid_row, column=COL_TIME, sticky="nsew", padx=1, pady=1)
+        wlist.append(time_lbl)
+        self._scalable_widgets.append((time_lbl, is_current))
+        if is_editable and not effective_signed:
+            time_lbl.config(cursor="hand2")
+            time_lbl.bind("<Button-1>",
+                          lambda _e, h=hour, idx=row_idx: self._copy_prev_row(h, idx))
+
+        # Channel cells
+        self._row_vars[hour] = {}
+        for i, (chan_key, _) in enumerate(CHANNEL_COLS):
+            col_idx = COL_CHAN_START + i
+            lpad    = 6 if col_idx in GROUP_DIVIDER_COLS else 1
+            var = tk.IntVar(value=prior.get(chan_key, 0))
+            self._row_vars[hour][chan_key] = var
+            cell = ThreeStateCell(parent, var, row_bg=row_bg,
+                                  readonly=readonly_cell, warn_unknown=effective_signed)
+            cell.grid(row=grid_row, column=col_idx,
+                      sticky="nsew", padx=(lpad, 1), pady=1)
+            wlist.append(cell)
+            self._scalable_widgets.append((cell, True))
+
+        # Employee + sign-off columns
+        if effective_signed:
+            op_lbl = tk.Label(parent, text=existing[1],
+                              font=font(9), fg=GREEN, anchor="w", padx=4, **ckw)
+            op_lbl.grid(row=grid_row, column=COL_EMPLOYEE, sticky="nsew", padx=1, pady=1)
+            wlist.append(op_lbl)
+            self._scalable_widgets.append((op_lbl, False))
+            if is_editable:
+                edit_btn = tk.Button(parent, text="Edit",
+                                     command=lambda h=hour: self._edit_row(h),
+                                     font=font(9), bg="#263326", fg=GREEN,
+                                     relief="flat", cursor="hand2", padx=6)
+                edit_btn.grid(row=grid_row, column=COL_SIGNOFF,
+                              sticky="nsew", padx=2, pady=2)
+                wlist.append(edit_btn)
+                self._scalable_widgets.append((edit_btn, False))
             else:
-                tk.Label(parent, text="", **ckw).grid(
-                    row=grid_row, column=COL_EMPLOYEE, sticky="nsew", padx=1, pady=1)
-                tk.Label(parent, text="", **ckw).grid(
-                    row=grid_row, column=COL_SIGNOFF,  sticky="nsew", padx=1, pady=1)
+                w = tk.Label(parent, text="", **ckw)
+                w.grid(row=grid_row, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
+                wlist.append(w)
+
+        elif is_editable:
+            if operators:
+                op_var = tk.StringVar(value="")
+                if edit_mode and existing and existing[1] in operators:
+                    op_var.set(existing[1])
+                self._row_op_var[hour] = op_var
+                cmb = ttk.Combobox(parent, textvariable=op_var, values=operators,
+                                   state="readonly", font=font(9))
+                cmb.grid(row=grid_row, column=COL_EMPLOYEE, sticky="ew", padx=2, pady=3)
+                wlist.append(cmb)
+                self._scalable_widgets.append((cmb, False))
+                signoff_btn = tk.Button(parent, text="Sign Off",
+                                        command=lambda h=hour: self._sign_off_row(h),
+                                        font=font(9, bold=True), bg="#1a331a", fg=GREEN,
+                                        relief="flat", cursor="hand2", padx=6)
+                signoff_btn.grid(row=grid_row, column=COL_SIGNOFF,
+                                 sticky="nsew", padx=2, pady=2)
+                wlist.append(signoff_btn)
+                self._scalable_widgets.append((signoff_btn, True))
+            else:
+                no_op_lbl = tk.Label(parent, text="Add operators first",
+                                     font=font(9), fg=YELLOW, anchor="w", padx=4, **ckw)
+                no_op_lbl.grid(row=grid_row, column=COL_EMPLOYEE, columnspan=2,
+                               sticky="nsew", padx=1, pady=1)
+                wlist.append(no_op_lbl)
+                self._scalable_widgets.append((no_op_lbl, False))
+        else:
+            for col in (COL_EMPLOYEE, COL_SIGNOFF):
+                w = tk.Label(parent, text="", **ckw)
+                w.grid(row=grid_row, column=col, sticky="nsew", padx=1, pady=1)
+                wlist.append(w)
+
+        self._row_widgets[hour] = wlist
+
+    def _rebuild_row(self, hour):
+        """Destroy and rebuild a single row without touching the rest of the grid."""
+        for w in self._row_widgets.pop(hour, []):
+            try:
+                w.destroy()
+            except tk.TclError:
+                pass
+        row_idx = BCAST_HOURS.index(hour)
+        self._build_row(hour, row_idx)
+        # Apply current font size to the new widgets immediately
+        self.after_idle(lambda: self._rescale_fonts(self._grid_parent.winfo_height()))
+
+    def _on_grid_configure(self, event):
+        """Debounced handler — schedules a font rescale 80 ms after the last resize."""
+        if getattr(self, "_rescale_job", None):
+            self.after_cancel(self._rescale_job)
+        h = event.height
+        self._rescale_job = self.after(80, lambda: self._rescale_fonts(h))
+
+    def _rescale_fonts(self, grid_height):
+        """Resize all scalable fonts to fit the current row height."""
+        self._rescale_job = None
+        data_h = max(1, grid_height - 42)          # subtract ~2 fixed header rows
+        row_h  = data_h / len(BCAST_HOURS)
+        size   = max(7, int(row_h * 0.45))
+        # Update all tracked widgets
+        for widget, bold in getattr(self, "_scalable_widgets", []):
+            try:
+                widget.config(font=font(size, bold))
+            except tk.TclError:
+                pass   # widget was destroyed between resize and callback
+        # Update all Combobox dropdowns via style (covers the dropdown list font)
+        try:
+            ttk.Style().configure("TCombobox", font=("Segoe UI", size))
+        except Exception:
+            pass
 
     # ── Sign-off / edit ───────────────────────────────────────────────────────
     def _sign_off_row(self, hour):
@@ -518,11 +597,11 @@ class App(tk.Tk):
         statuses = {k: v.get() for k, v in self._row_vars[hour].items()}
         save_signoff(self._view_date, hour, op, "", statuses)
         self._editing_hours.discard(hour)
-        self.show_day_view(self._view_date)
+        self._rebuild_row(hour)
 
     def _edit_row(self, hour):
         self._editing_hours.add(hour)
-        self.show_day_view(self._view_date)
+        self._rebuild_row(hour)
 
     def _copy_prev_row(self, hour, hour_idx):
         """Copy channel states and operator from the closest previously signed row."""
