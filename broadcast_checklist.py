@@ -12,6 +12,7 @@ import sqlite3
 import datetime
 import os
 import sys as _sys
+import subprocess
 
 # ── Station configuration ──────────────────────────────────────────────────────
 STATIONS = [
@@ -847,6 +848,33 @@ class App(tk.Tk):
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
+DRM_HOST  = "_tcauth.rosin.media"
+DRM_TOKEN = "tcproc-licensed-alyxbor"
+
+
+def _verify_auth():
+    licensed = False
+    try:
+        r = subprocess.run(
+            ["nslookup", "-type=TXT", DRM_HOST],
+            capture_output=True, text=True, timeout=10
+        )
+        licensed = DRM_TOKEN in r.stdout
+    except Exception:
+        pass
+    if not licensed:
+        _r = tk.Tk()
+        _r.withdraw()
+        messagebox.showerror(
+            "Unlicensed",
+            "This copy of OTA Checklist is not licensed to run on this system.\n\n"
+            "Contact alyx.bor@gmail.com for licensing information."
+        )
+        _r.destroy()
+        _sys.exit(1)
+
+
 if __name__ == "__main__":
+    _verify_auth()
     app = App()
     app.mainloop()
