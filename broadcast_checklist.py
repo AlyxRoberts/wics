@@ -407,10 +407,9 @@ class App(tk.Tk):
         right_btn = tk.Button(
             nav_bar, text="▶", command=self._next_day,
             font=font(13),
-            bg=BG_HDR, fg=(DIM if is_today else TEXT),
+            bg=BG_HDR, fg=TEXT,
             relief="flat", padx=14, pady=2,
-            cursor=("" if is_today else "hand2"),
-            state=("disabled" if is_today else "normal"),
+            cursor="hand2",
             activebackground=BG_CARD,
         )
         right_btn.grid(row=0, column=2, padx=(4, 14))
@@ -658,11 +657,8 @@ class App(tk.Tk):
         self.show_day_view(self._view_date - datetime.timedelta(days=1))
 
     def _next_day(self):
-        today    = broadcast_date(datetime.datetime.now())
-        new_date = self._view_date + datetime.timedelta(days=1)
-        if new_date <= today:
-            self._editing_hours.clear()
-            self.show_day_view(new_date)
+        self._editing_hours.clear()
+        self.show_day_view(self._view_date + datetime.timedelta(days=1))
 
     def _open_date_picker(self, _=None):
         with sqlite3.connect(DB_PATH) as c:
