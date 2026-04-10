@@ -102,10 +102,15 @@ def init_db():
                 on_air      INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS operators (
-                id   INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT    NOT NULL UNIQUE COLLATE NOCASE
+                id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                name   TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+                active INTEGER NOT NULL DEFAULT 1
             );
         """)
+        # Migration: add active column if it doesn't exist yet
+        cols = [r[1] for r in c.execute("PRAGMA table_info(operators)").fetchall()]
+        if "active" not in cols:
+            c.execute("ALTER TABLE operators ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
 
 
 def broadcast_date(dt):
@@ -157,27 +162,37 @@ def save_signoff(bdate, hour, operator, notes, statuses):
 
 
 def get_operators():
+    """Return names of active operators only (for dropdowns)."""
     with sqlite3.connect(DB_PATH) as c:
         return [r[0] for r in c.execute(
-            "SELECT name FROM operators ORDER BY name COLLATE NOCASE"
+            "SELECT name FROM operators WHERE active=1 ORDER BY name COLLATE NOCASE"
         ).fetchall()]
+
+
+def get_all_operators():
+    """Return [(name, active), ...] for all operators regardless of status."""
+    with sqlite3.connect(DB_PATH) as c:
+        return c.execute(
+            "SELECT name, active FROM operators ORDER BY name COLLATE NOCASE"
+        ).fetchall()
 
 
 def add_operator(name):
     with sqlite3.connect(DB_PATH) as c:
-        c.execute("INSERT OR IGNORE INTO operators (name) VALUES (?)", (name.strip(),))
+        c.execute("INSERT OR IGNORE INTO operators (name, active) VALUES (?, 1)", (name.strip(),))
 
 
-def remove_operator(name):
+def set_operator_active(name, active):
     with sqlite3.connect(DB_PATH) as c:
-        c.execute("DELETE FROM operators WHERE name=?", (name,))
+        c.execute("UPDATE operators SET active=? WHERE name=?", (1 if active else 0, name))
 
 
 def rename_operator(old_name, new_name):
-    """Rename an operator without touching any historical sign-off records."""
+    """Rename an operator and update their name on all historical sign-offs."""
+    new = new_name.strip()
     with sqlite3.connect(DB_PATH) as c:
-        c.execute("UPDATE operators SET name=? WHERE name=?",
-                  (new_name.strip(), old_name))
+        c.execute("UPDATE operators SET name=? WHERE name=?", (new, old_name))
+        c.execute("UPDATE signoffs SET operator_name=? WHERE operator_name=?", (new, old_name))
 
 
 def get_previous_row_statuses(view_date, hour_idx):
@@ -580,9 +595,6 @@ class App(tk.Tk):
                   command=lambda: self.show_day_view(self._view_date),
                   font=font(10), bg=BG_CARD, fg=BLUE,
                   relief="flat", padx=12, pady=4, cursor="hand2").pack(side="right")
-        tk.Label(wrapper,
-                 text="Renaming an operator does not change their name on past sign-offs.",
-                 font=font(11), fg=SUBTEXT, bg=BG).pack(anchor="w", pady=(0, 12))
 
         add_row = tk.Frame(wrapper, bg=BG_CARD, padx=14, pady=12)
         add_row.pack(fill="x")
@@ -604,41 +616,74 @@ class App(tk.Tk):
     def _refresh_operators_list(self):
         for w in self._ops_list_frame.winfo_children():
             w.destroy()
-        operators = get_operators()
-        if not operators:
+        all_ops = get_all_operators()
+        active   = [(n, a) for n, a in all_ops if a]
+        inactive = [(n, a) for n, a in all_ops if not a]
+
+        if not all_ops:
             tk.Label(self._ops_list_frame, text="No operators added yet.",
                      font=font(12), fg=SUBTEXT, bg=BG).pack(pady=20)
             return
-        for name in operators:
-            row = tk.Frame(self._ops_list_frame, bg=BG_CARD, padx=14, pady=8)
-            row.pack(fill="x", pady=3)
-            tk.Label(row, text=name, font=font(12), fg=TEXT, bg=BG_CARD).pack(side="left")
-            tk.Button(row, text="Remove",
-                      command=lambda n=name: self._remove_operator(n),
-                      font=font(10), bg=RED, fg=BG,
-                      relief="flat", padx=10, pady=2, cursor="hand2").pack(side="right")
-            tk.Button(row, text="Rename",
-                      command=lambda n=name: self._rename_operator_prompt(n),
-                      font=font(10), bg=BG_CARD, fg=BLUE,
-                      relief="flat", padx=10, pady=2, cursor="hand2").pack(side="right", padx=6)
+
+        def make_section(label_text, entries, is_active):
+            tk.Label(self._ops_list_frame, text=label_text,
+                     font=font(11, bold=True), fg=SUBTEXT, bg=BG).pack(
+                anchor="w", pady=(12, 4))
+            if not entries:
+                tk.Label(self._ops_list_frame, text="None",
+                         font=font(11), fg=DIM, bg=BG).pack(anchor="w", padx=4, pady=2)
+                return
+            for name, _ in entries:
+                row = tk.Frame(self._ops_list_frame, bg=BG_CARD, padx=14, pady=8)
+                row.pack(fill="x", pady=3)
+                tk.Label(row, text=name, font=font(12), fg=TEXT, bg=BG_CARD).pack(side="left")
+                if is_active:
+                    tk.Button(row, text="Deactivate",
+                              command=lambda n=name: self._deactivate_operator(n),
+                              font=font(10), bg=RED, fg=BG,
+                              relief="flat", padx=10, pady=2, cursor="hand2").pack(side="right")
+                    tk.Button(row, text="Rename",
+                              command=lambda n=name: self._rename_operator_prompt(n),
+                              font=font(10), bg=BG_CARD, fg=BLUE,
+                              relief="flat", padx=10, pady=2, cursor="hand2").pack(side="right", padx=6)
+                else:
+                    tk.Button(row, text="Reactivate",
+                              command=lambda n=name: self._reactivate_operator(n),
+                              font=font(10), bg=GREEN, fg=BG,
+                              relief="flat", padx=10, pady=2, cursor="hand2").pack(side="right")
+
+        make_section("Active Operators", active, True)
+        make_section("Inactive Operators", inactive, False)
 
     def _add_operator(self):
         name = self._new_op_entry.get().strip()
         if not name:
             return
-        if name in get_operators():
-            messagebox.showwarning("Duplicate", f'"{name}" is already in the list.')
-            return
+        all_names = [n.lower() for n, _ in get_all_operators()]
+        if name.lower() in all_names:
+            # Could be inactive — offer to reactivate instead
+            for n, active in get_all_operators():
+                if n.lower() == name.lower():
+                    if not active:
+                        if messagebox.askyesno("Inactive Operator",
+                                               f'"{n}" already exists but is inactive.\n'
+                                               f'Reactivate them instead?'):
+                            set_operator_active(n, True)
+                            self._new_op_entry.delete(0, tk.END)
+                            self._refresh_operators_list()
+                    else:
+                        messagebox.showwarning("Duplicate", f'"{n}" is already in the list.')
+                    return
         add_operator(name)
         self._new_op_entry.delete(0, tk.END)
         self._refresh_operators_list()
 
-    def _remove_operator(self, name):
-        if not messagebox.askyesno("Remove Operator",
-                                   f'Remove "{name}" from the operator list?\n\n'
-                                   f'Their name will remain on any existing sign-offs.'):
-            return
-        remove_operator(name)
+    def _deactivate_operator(self, name):
+        set_operator_active(name, False)
+        self._refresh_operators_list()
+
+    def _reactivate_operator(self, name):
+        set_operator_active(name, True)
         self._refresh_operators_list()
 
     def _rename_operator_prompt(self, old_name):
@@ -667,7 +712,7 @@ class App(tk.Tk):
             if not new_name or new_name == old_name:
                 popup.destroy()
                 return
-            existing = [op.lower() for op in get_operators() if op != old_name]
+            existing = [n.lower() for n, _ in get_all_operators() if n != old_name]
             if new_name.lower() in existing:
                 messagebox.showwarning("Duplicate",
                                        f'"{new_name}" already exists.', parent=popup)
