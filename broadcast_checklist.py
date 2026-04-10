@@ -531,10 +531,10 @@ class App(tk.Tk):
             return
         for chan_key, var in self._row_vars.get(hour, {}).items():
             var.set(prev_statuses.get(chan_key, 0))
-        # Copy operator if the previous row had one and this row's dropdown exists
+        # Copy operator only if no employee has been selected yet
         if prev_operator:
             op_var = self._row_op_var.get(hour)
-            if op_var is not None:
+            if op_var is not None and op_var.get() == "":
                 op_var.set(prev_operator)
 
     # ── Date navigation ───────────────────────────────────────────────────────
