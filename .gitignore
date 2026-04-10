@@ -4,10 +4,6 @@ python/
 # Application database
 broadcast_log.db
 
-# Compiled bytecode (generated locally by compile.bat — version-specific)
-broadcast_checklist.pyc
-__pycache__/
-
 # PyInstaller output
 build/
 dist/
