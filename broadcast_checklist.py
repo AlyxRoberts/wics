@@ -437,7 +437,7 @@ class App(tk.Tk):
         for i, (_, short) in enumerate(CHANNEL_COLS):
             col_idx = COL_CHAN_START + i
             lpad = 6 if col_idx in GROUP_DIVIDER_COLS else 1
-            tk.Label(parent, text=short, font=font(16), **hkw).grid(
+            tk.Label(parent, text=short, font=font(16, bold=True), **hkw).grid(
                 row=1, column=col_idx, sticky="nsew", padx=(lpad, 1), pady=1)
         tk.Label(parent, text="", **hkw).grid(
             row=1, column=COL_EMPLOYEE, sticky="nsew", padx=(6, 1), pady=1)
