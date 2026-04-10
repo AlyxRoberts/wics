@@ -1,38 +1,34 @@
 @echo off
-title Broadcast Checklist
+title OTA Checklist
 
-REM ── Bundled Python (preferred) ────────────────────────────────────────────────
-REM Place a full Python installation in a folder named "python" next to this file.
-REM The embeddable zip from python.org will NOT work here because it lacks tkinter.
-REM Use the standard Windows installer and point it at that folder, or copy an
-REM existing Python installation into it.
+REM ── Locate Python ─────────────────────────────────────────────────────────────
+set PYTHON_CMD=
+
 if exist "%~dp0python\python.exe" (
-    "%~dp0python\python.exe" "%~dp0broadcast_checklist.py"
-    goto :end
+    set PYTHON_CMD="%~dp0python\python.exe"
+    goto :launch
 )
 
-REM ── System Python Launcher ────────────────────────────────────────────────────
 where py >nul 2>&1
 if %errorlevel%==0 (
-    py "%~dp0broadcast_checklist.py"
-    goto :end
+    set PYTHON_CMD=py
+    goto :launch
 )
 
-REM ── System python on PATH ─────────────────────────────────────────────────────
 where python >nul 2>&1
 if %errorlevel%==0 (
-    python "%~dp0broadcast_checklist.py"
-    goto :end
+    set PYTHON_CMD=python
+    goto :launch
 )
 
-REM ── Nothing found ─────────────────────────────────────────────────────────────
+REM ── Python not found ─────────────────────────────────────────────────────────
 echo.
-echo  Python was not found.
+echo  Python was not found on this computer.
 echo.
 echo  To fix this, place a full Python installation in a folder named "python"
 echo  next to this .bat file so the folder structure looks like:
 echo.
-echo    Broadcast Checklist\
+echo    OTA Checklist\
 echo      launch.bat
 echo      broadcast_checklist.py
 echo      python\
@@ -47,5 +43,20 @@ echo  NOTE: Do NOT use the embeddable zip package -- it is missing tkinter,
 echo  which this application requires.
 echo.
 pause
+goto :end
+
+:launch
+echo.
+echo  +----------------------------------------------------------+
+echo  ^|                    OTA Checklist                        ^|
+echo  ^|                                                          ^|
+echo  ^|  The application is running in the background.           ^|
+echo  ^|                                                          ^|
+echo  ^|  DO NOT CLOSE THIS WINDOW.                               ^|
+echo  ^|  Closing it will immediately exit the application.       ^|
+echo  +----------------------------------------------------------+
+echo.
+
+%PYTHON_CMD% "%~dp0broadcast_checklist.py"
 
 :end

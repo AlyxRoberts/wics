@@ -47,6 +47,9 @@ COL_CHAN_START = 1
 COL_EMPLOYEE  = COL_CHAN_START + len(CHANNEL_COLS)       # 19
 COL_SIGNOFF   = COL_CHAN_START + len(CHANNEL_COLS) + 1   # 20
 
+# Columns that start a new station group (exclude the very first) — get extra left padding
+GROUP_DIVIDER_COLS = {start for _, _, start in STATION_SPANS[1:]}
+
 BROADCAST_START_HOUR = 5
 BCAST_HOURS  = list(range(BROADCAST_START_HOUR, 24)) + list(range(0, BROADCAST_START_HOUR))
 HOUR_LABELS  = [datetime.time(h, 0).strftime("%I:%M %p").lstrip("0") for h in BCAST_HOURS]
@@ -195,9 +198,9 @@ def get_previous_row_statuses(view_date, hour_idx):
 # ── ThreeStateCell ─────────────────────────────────────────────────────────────
 # States: 0 = Unknown (□), 1 = On Air (✔), 2 = Off Air (✘)
 _CELL_CFG = {
-    0: ("□",  SUBTEXT,  None),
-    1: ("✔",  GREEN,    "#1a3328"),
-    2: ("✘",  RED,      "#331a1a"),
+    0: ("",   SUBTEXT,  None),        # Unknown — blank
+    1: ("✔",  GREEN,    "#1a3328"),   # On Air
+    2: ("✘",  RED,      "#331a1a"),   # Off Air
 }
 
 
@@ -270,7 +273,7 @@ class ScrollFrame(tk.Frame):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Broadcast Checklist")
+        self.title("OTA Checklist")
         self.geometry("1280x760")
         self.minsize(900, 520)
         self.configure(bg=BG)
@@ -281,7 +284,6 @@ class App(tk.Tk):
         self._last_hour     = -1
 
         self._build_header()
-        self._build_nav()
         self.bind("<Control-o>", lambda _: self.show_operators())
 
         self.content = tk.Frame(self, bg=BG)
@@ -295,7 +297,7 @@ class App(tk.Tk):
     def _build_header(self):
         hdr = tk.Frame(self, bg=BG_HDR, pady=10)
         hdr.pack(fill="x")
-        tk.Label(hdr, text="Broadcast Checklist",
+        tk.Label(hdr, text="OTA Checklist",
                  font=font(17, bold=True), fg=TEXT, bg=BG_HDR).pack(side="left", padx=20)
         self._lbl_time  = tk.Label(hdr, text="", font=font(13), fg=BLUE,   bg=BG_HDR)
         self._lbl_time.pack(side="right", padx=16)
@@ -312,24 +314,6 @@ class App(tk.Tk):
         self._last_hour = now.hour
         self.after(10_000, self._tick)
 
-    # ── Navigation ────────────────────────────────────────────────────────────
-    def _build_nav(self):
-        nav = tk.Frame(self, bg=BG, pady=8)
-        nav.pack(fill="x", padx=20)
-        self._btn_check = tk.Button(
-            nav, text="Checklist",
-            command=lambda: self.show_day_view(self._view_date),
-            font=font(11, bold=True), bg=BLUE, fg=BG,
-            relief="flat", padx=16, pady=6, cursor="hand2",
-        )
-        self._btn_check.pack(side="left")
-
-    def _nav_select(self, which):
-        if which == "check":
-            self._btn_check.config(bg=BLUE, fg=BG, font=font(11, bold=True))
-        else:
-            self._btn_check.config(bg=BG_CARD, fg=TEXT, font=font(11))
-
     def _clear(self):
         for w in self.content.winfo_children():
             w.destroy()
@@ -338,7 +322,6 @@ class App(tk.Tk):
 
     # ── Day view ──────────────────────────────────────────────────────────────
     def show_day_view(self, view_date=None):
-        self._nav_select("check")
         self._clear()
 
         today     = broadcast_date(datetime.datetime.now())
@@ -392,7 +375,7 @@ class App(tk.Tk):
         parent.columnconfigure(COL_TIME, weight=0, minsize=64)
         for c in range(COL_CHAN_START, COL_EMPLOYEE):
             parent.columnconfigure(c, weight=1, minsize=40)
-        parent.columnconfigure(COL_EMPLOYEE, weight=3, minsize=115)
+        parent.columnconfigure(COL_EMPLOYEE, weight=2, minsize=86)
         parent.columnconfigure(COL_SIGNOFF,  weight=0, minsize=80)
 
         # Row weights — headers are compact; 24 data rows share all remaining height
@@ -407,10 +390,11 @@ class App(tk.Tk):
         tk.Label(parent, text="Time", font=font(9, bold=True), **hkw).grid(
             row=0, column=COL_TIME, sticky="nsew", padx=1, pady=1)
         for stn_id, span, start in STATION_SPANS:
+            lpad = 6 if start in GROUP_DIVIDER_COLS else 1
             tk.Label(parent, text=stn_id, font=font(9, bold=True), **hkw).grid(
-                row=0, column=start, columnspan=span, sticky="nsew", padx=1, pady=1)
+                row=0, column=start, columnspan=span, sticky="nsew", padx=(lpad, 1), pady=1)
         tk.Label(parent, text="Employee", font=font(9, bold=True), **hkw).grid(
-            row=0, column=COL_EMPLOYEE, sticky="nsew", padx=1, pady=1)
+            row=0, column=COL_EMPLOYEE, sticky="nsew", padx=(6, 1), pady=1)
         tk.Label(parent, text="", bg=BG_HDR).grid(
             row=0, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
 
@@ -418,10 +402,12 @@ class App(tk.Tk):
         tk.Label(parent, text="", **hkw).grid(
             row=1, column=COL_TIME, sticky="nsew", padx=1, pady=1)
         for i, (_, short) in enumerate(CHANNEL_COLS):
+            col_idx = COL_CHAN_START + i
+            lpad = 6 if col_idx in GROUP_DIVIDER_COLS else 1
             tk.Label(parent, text=short, font=font(8), **hkw).grid(
-                row=1, column=COL_CHAN_START + i, sticky="nsew", padx=1, pady=1)
+                row=1, column=col_idx, sticky="nsew", padx=(lpad, 1), pady=1)
         tk.Label(parent, text="", **hkw).grid(
-            row=1, column=COL_EMPLOYEE, sticky="nsew", padx=1, pady=1)
+            row=1, column=COL_EMPLOYEE, sticky="nsew", padx=(6, 1), pady=1)
         tk.Label(parent, text="", bg=BG_HDR).grid(
             row=1, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
 
@@ -454,11 +440,13 @@ class App(tk.Tk):
             # Channel cells
             self._row_vars[hour] = {}
             for i, (chan_key, _) in enumerate(CHANNEL_COLS):
+                col_idx = COL_CHAN_START + i
+                lpad    = 6 if col_idx in GROUP_DIVIDER_COLS else 1
                 var = tk.IntVar(value=prior.get(chan_key, 0))
                 self._row_vars[hour][chan_key] = var
                 ThreeStateCell(parent, var, row_bg=row_bg, readonly=readonly_cell).grid(
-                    row=grid_row, column=COL_CHAN_START + i,
-                    sticky="nsew", padx=1, pady=1)
+                    row=grid_row, column=col_idx,
+                    sticky="nsew", padx=(lpad, 1), pady=1)
 
             # Employee + sign-off columns
             if effective_signed:
@@ -577,7 +565,6 @@ class App(tk.Tk):
 
     # ── Operators management (Ctrl+O) ─────────────────────────────────────────
     def show_operators(self):
-        self._nav_select("ops")
         self._clear()
 
         wrapper = tk.Frame(self.content, bg=BG)
@@ -585,8 +572,14 @@ class App(tk.Tk):
         wrapper.columnconfigure(0, weight=1)
         self.content.rowconfigure(0, weight=1)
 
-        tk.Label(wrapper, text="Operators",
-                 font=font(15, bold=True), fg=TEXT, bg=BG).pack(anchor="w", pady=(0, 4))
+        title_row = tk.Frame(wrapper, bg=BG)
+        title_row.pack(fill="x", pady=(0, 4))
+        tk.Label(title_row, text="Operators",
+                 font=font(15, bold=True), fg=TEXT, bg=BG).pack(side="left")
+        tk.Button(title_row, text="← Back to Checklist",
+                  command=lambda: self.show_day_view(self._view_date),
+                  font=font(10), bg=BG_CARD, fg=BLUE,
+                  relief="flat", padx=12, pady=4, cursor="hand2").pack(side="right")
         tk.Label(wrapper,
                  text="Renaming an operator does not change their name on past sign-offs.",
                  font=font(11), fg=SUBTEXT, bg=BG).pack(anchor="w", pady=(0, 12))
