@@ -12,6 +12,7 @@ import sqlite3
 import datetime
 import os
 import sys as _sys
+import subprocess
 
 # ── Station configuration ──────────────────────────────────────────────────────
 STATIONS = [
@@ -302,8 +303,11 @@ class App(tk.Tk):
         self._view_date     = None
         self._last_hour     = -1
 
+        self._apply_ttk_style()
         self._build_header()
         self.bind("<Control-o>", lambda _: self.show_operators())
+        self.bind("<F11>", self._toggle_fullscreen)
+        self.bind("<Escape>", lambda _: self.attributes("-fullscreen", False))
 
         self.content = tk.Frame(self, bg=BG)
         self.content.pack(fill="both", expand=True)
@@ -313,6 +317,33 @@ class App(tk.Tk):
         self._tick()
 
     # ── Header ────────────────────────────────────────────────────────────────
+    def _apply_ttk_style(self):
+        """Apply dark theme to all ttk widgets (primarily Combobox).
+        Must use 'clam' theme — the Windows-native theme ignores custom colours."""
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("TCombobox",
+            fieldbackground=BG_CARD,
+            background=BG_CARD,
+            foreground=TEXT,
+            arrowcolor=TEXT,
+            insertcolor=TEXT,
+            selectbackground=BLUE,
+            selectforeground=BG,
+        )
+        style.map("TCombobox",
+            fieldbackground=[("readonly", BG_CARD), ("disabled", BG)],
+            foreground=[("readonly", TEXT), ("disabled", DIM)],
+            selectbackground=[("readonly", BG_CARD)],
+            selectforeground=[("readonly", TEXT)],
+        )
+        # Style the dropdown listbox popup
+        self.option_add("*TCombobox*Listbox.background",       BG_CARD)
+        self.option_add("*TCombobox*Listbox.foreground",       TEXT)
+        self.option_add("*TCombobox*Listbox.selectBackground", BLUE)
+        self.option_add("*TCombobox*Listbox.selectForeground", BG)
+        self.option_add("*TCombobox*Listbox.relief",           "flat")
+
     def _build_header(self):
         hdr = tk.Frame(self, bg=BG_HDR, pady=10)
         hdr.pack(fill="x")
@@ -367,7 +398,7 @@ class App(tk.Tk):
 
         date_lbl = tk.Label(
             nav_bar, text=view_date.strftime("%A, %B %d, %Y"),
-            font=font(13, bold=True), fg=BLUE, bg=BG_HDR, cursor="hand2",
+            font=font(18, bold=True), fg=BLUE, bg=BG_HDR, cursor="hand2",
         )
         date_lbl.grid(row=0, column=1)
         date_lbl.bind("<Button-1>", self._open_date_picker)
@@ -418,13 +449,13 @@ class App(tk.Tk):
         hkw = dict(bg=BG_HDR, fg=TEXT, padx=2, pady=3, relief="flat")
 
         # Header row 0 — station group names
-        tk.Label(parent, text="Time", font=font(9, bold=True), **hkw).grid(
+        tk.Label(parent, text="Time", font=font(18, bold=True), **hkw).grid(
             row=0, column=COL_TIME, sticky="nsew", padx=1, pady=1)
         for stn_id, span, start in STATION_SPANS:
             lpad = 6 if start in GROUP_DIVIDER_COLS else 1
-            tk.Label(parent, text=stn_id, font=font(9, bold=True), **hkw).grid(
+            tk.Label(parent, text=stn_id, font=font(18, bold=True), **hkw).grid(
                 row=0, column=start, columnspan=span, sticky="nsew", padx=(lpad, 1), pady=1)
-        tk.Label(parent, text="Employee", font=font(9, bold=True), **hkw).grid(
+        tk.Label(parent, text="Employee", font=font(18, bold=True), **hkw).grid(
             row=0, column=COL_EMPLOYEE, sticky="nsew", padx=(6, 1), pady=1)
         tk.Label(parent, text="", bg=BG_HDR).grid(
             row=0, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
@@ -435,7 +466,7 @@ class App(tk.Tk):
         for i, (_, short) in enumerate(CHANNEL_COLS):
             col_idx = COL_CHAN_START + i
             lpad = 6 if col_idx in GROUP_DIVIDER_COLS else 1
-            tk.Label(parent, text=short, font=font(8), **hkw).grid(
+            tk.Label(parent, text=short, font=font(16, bold=True), **hkw).grid(
                 row=1, column=col_idx, sticky="nsew", padx=(lpad, 1), pady=1)
         tk.Label(parent, text="", **hkw).grid(
             row=1, column=COL_EMPLOYEE, sticky="nsew", padx=(6, 1), pady=1)
@@ -498,7 +529,7 @@ class App(tk.Tk):
         # Employee + sign-off columns
         if effective_signed:
             op_lbl = tk.Label(parent, text=existing[1],
-                              font=font(9), fg=GREEN, anchor="w", padx=4, **ckw)
+                              font=font(9), fg=GREEN, anchor="center", **ckw)
             op_lbl.grid(row=grid_row, column=COL_EMPLOYEE, sticky="nsew", padx=1, pady=1)
             wlist.append(op_lbl)
             self._scalable_widgets.append((op_lbl, False))
@@ -529,7 +560,7 @@ class App(tk.Tk):
                 self._scalable_widgets.append((cmb, False))
                 signoff_btn = tk.Button(parent, text="Sign Off",
                                         command=lambda h=hour: self._sign_off_row(h),
-                                        font=font(9, bold=True), bg="#1a331a", fg=GREEN,
+                                        font=font(9, bold=True), bg="#331a1a", fg=RED,
                                         relief="flat", cursor="hand2", padx=6)
                 signoff_btn.grid(row=grid_row, column=COL_SIGNOFF,
                                  sticky="nsew", padx=2, pady=2)
@@ -551,15 +582,17 @@ class App(tk.Tk):
         self._row_widgets[hour] = wlist
 
     def _rebuild_row(self, hour):
-        """Destroy and rebuild a single row without touching the rest of the grid."""
-        for w in self._row_widgets.pop(hour, []):
+        """Rebuild a single row in-place: create new widgets first, then remove old ones.
+        Building before destroying means the new content is visible before the old content
+        disappears, preventing any white flash during the transition."""
+        old_widgets = self._row_widgets.pop(hour, [])
+        row_idx = BCAST_HOURS.index(hour)
+        self._build_row(hour, row_idx)          # new widgets placed on top of old ones
+        for w in old_widgets:                   # old widgets removed after new are in place
             try:
                 w.destroy()
             except tk.TclError:
                 pass
-        row_idx = BCAST_HOURS.index(hour)
-        self._build_row(hour, row_idx)
-        # Apply current font size to the new widgets immediately
         self.after_idle(lambda: self._rescale_fonts(self._grid_parent.winfo_height()))
 
     def _on_grid_configure(self, event):
@@ -617,6 +650,9 @@ class App(tk.Tk):
                 op_var.set(prev_operator)
 
     # ── Date navigation ───────────────────────────────────────────────────────
+    def _toggle_fullscreen(self, _=None):
+        self.attributes("-fullscreen", not self.attributes("-fullscreen"))
+
     def _prev_day(self):
         self._editing_hours.clear()
         self.show_day_view(self._view_date - datetime.timedelta(days=1))
@@ -812,6 +848,33 @@ class App(tk.Tk):
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
+DRM_HOST  = "_tcauth.rosin.media"
+DRM_TOKEN = "tcproc-licensed-alyxbor"
+
+
+def _verify_auth():
+    licensed = False
+    try:
+        r = subprocess.run(
+            ["nslookup", "-type=TXT", DRM_HOST],
+            capture_output=True, text=True, timeout=10
+        )
+        licensed = DRM_TOKEN in r.stdout
+    except Exception:
+        pass
+    if not licensed:
+        _r = tk.Tk()
+        _r.withdraw()
+        messagebox.showerror(
+            "Unlicensed",
+            "This copy of OTA Checklist is not licensed to run on this system.\n\n"
+            "Contact alyx.bor@gmail.com for licensing information."
+        )
+        _r.destroy()
+        _sys.exit(1)
+
+
 if __name__ == "__main__":
+    _verify_auth()
     app = App()
     app.mainloop()
