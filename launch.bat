@@ -30,7 +30,7 @@ echo  next to this .bat file so the folder structure looks like:
 echo.
 echo    OTA Checklist\
 echo      launch.bat
-echo      broadcast_checklist.py
+echo      broadcast_checklist.pyc
 echo      python\
 echo        python.exe
 echo        ...
@@ -48,15 +48,17 @@ goto :end
 :launch
 echo.
 echo  +----------------------------------------------------------+
-echo  ^|                    OTA Checklist                       ^|
-echo  ^|                                                        ^|
-echo  ^|  The application is running in the background.         ^|
-echo  ^|                                                        ^|
-echo  ^|  DO NOT CLOSE THIS WINDOW.                             ^|
-echo  ^|  Closing it will immediately exit the application.     ^|
+echo  ^|                    OTA Checklist                        ^|
+echo  ^|                                                         ^|
+echo  ^|  2026 Alyx Borisov ^| alyx.bor@gmail.com               ^|
+echo  ^|                                                         ^|
+echo  ^|  The application is running in the background.          ^|
+echo  ^|                                                         ^|
+echo  ^|  DO NOT CLOSE THIS WINDOW.                              ^|
+echo  ^|  Closing it will immediately exit the application.      ^|
 echo  +----------------------------------------------------------+
 echo.
 
-%PYTHON_CMD% "%~dp0broadcast_checklist.py"
+%PYTHON_CMD% "%~dp0broadcast_checklist.pyc"
 
 :end
