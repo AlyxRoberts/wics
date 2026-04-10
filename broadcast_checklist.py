@@ -304,6 +304,8 @@ class App(tk.Tk):
 
         self._build_header()
         self.bind("<Control-o>", lambda _: self.show_operators())
+        self.bind("<F11>", self._toggle_fullscreen)
+        self.bind("<Escape>", lambda _: self.attributes("-fullscreen", False))
 
         self.content = tk.Frame(self, bg=BG)
         self.content.pack(fill="both", expand=True)
@@ -617,6 +619,9 @@ class App(tk.Tk):
                 op_var.set(prev_operator)
 
     # ── Date navigation ───────────────────────────────────────────────────────
+    def _toggle_fullscreen(self, _=None):
+        self.attributes("-fullscreen", not self.attributes("-fullscreen"))
+
     def _prev_day(self):
         self._editing_hours.clear()
         self.show_day_view(self._view_date - datetime.timedelta(days=1))
