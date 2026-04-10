@@ -531,7 +531,7 @@ class App(tk.Tk):
                 self._scalable_widgets.append((cmb, False))
                 signoff_btn = tk.Button(parent, text="Sign Off",
                                         command=lambda h=hour: self._sign_off_row(h),
-                                        font=font(9, bold=True), bg="#1a331a", fg=GREEN,
+                                        font=font(9, bold=True), bg="#331a1a", fg=RED,
                                         relief="flat", cursor="hand2", padx=6)
                 signoff_btn.grid(row=grid_row, column=COL_SIGNOFF,
                                  sticky="nsew", padx=2, pady=2)
@@ -553,15 +553,17 @@ class App(tk.Tk):
         self._row_widgets[hour] = wlist
 
     def _rebuild_row(self, hour):
-        """Destroy and rebuild a single row without touching the rest of the grid."""
-        for w in self._row_widgets.pop(hour, []):
+        """Rebuild a single row in-place: create new widgets first, then remove old ones.
+        Building before destroying means the new content is visible before the old content
+        disappears, preventing any white flash during the transition."""
+        old_widgets = self._row_widgets.pop(hour, [])
+        row_idx = BCAST_HOURS.index(hour)
+        self._build_row(hour, row_idx)          # new widgets placed on top of old ones
+        for w in old_widgets:                   # old widgets removed after new are in place
             try:
                 w.destroy()
             except tk.TclError:
                 pass
-        row_idx = BCAST_HOURS.index(hour)
-        self._build_row(hour, row_idx)
-        # Apply current font size to the new widgets immediately
         self.after_idle(lambda: self._rescale_fonts(self._grid_parent.winfo_height()))
 
     def _on_grid_configure(self, event):
