@@ -48,14 +48,14 @@ goto :end
 :launch
 echo.
 echo  +----------------------------------------------------------+
-echo  ^|                    OTA Checklist                        ^|
-echo  ^|                                                         ^|
-echo  ^|  2026 Alyx Borisov ^| alyx.bor@gmail.com               ^|
-echo  ^|                                                         ^|
-echo  ^|  The application is running in the background.          ^|
-echo  ^|                                                         ^|
-echo  ^|  DO NOT CLOSE THIS WINDOW.                              ^|
-echo  ^|  Closing it will immediately exit the application.      ^|
+echo  ^|                      OTA Checklist                       ^|
+echo  ^|                                                          ^|
+echo  ^|  2026 Alyx Borisov ^| alyx.bor@gmail.com                  ^|
+echo  ^|                                                          ^|
+echo  ^|  The application is running in the background.           ^|
+echo  ^|                                                          ^|
+echo  ^|  DO NOT CLOSE THIS WINDOW.                               ^|
+echo  ^|  Closing it will immediately exit the application.       ^|
 echo  +----------------------------------------------------------+
 echo.
 
