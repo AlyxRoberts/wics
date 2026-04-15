@@ -47,6 +47,7 @@ COL_TIME      = 0
 COL_CHAN_START = 1
 COL_EMPLOYEE  = COL_CHAN_START + len(CHANNEL_COLS)       # 19
 COL_SIGNOFF   = COL_CHAN_START + len(CHANNEL_COLS) + 1   # 20
+COL_CLEAR     = COL_CHAN_START + len(CHANNEL_COLS) + 2   # 21
 
 # Columns that start a new station group (exclude the very first) — get extra left padding
 GROUP_DIVIDER_COLS = {start for _, _, start in STATION_SPANS[1:]}
@@ -438,6 +439,7 @@ class App(tk.Tk):
             parent.columnconfigure(c, weight=1, minsize=40)
         parent.columnconfigure(COL_EMPLOYEE, weight=2, minsize=86)
         parent.columnconfigure(COL_SIGNOFF,  weight=0, minsize=80)
+        parent.columnconfigure(COL_CLEAR,   weight=0, minsize=36)
 
         # Row weights — headers are compact; 24 data rows share all remaining height
         parent.rowconfigure(0, weight=0, minsize=20)
@@ -458,6 +460,8 @@ class App(tk.Tk):
             row=0, column=COL_EMPLOYEE, sticky="nsew", padx=(6, 1), pady=1)
         tk.Label(parent, text="", bg=BG_HDR).grid(
             row=0, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
+        tk.Label(parent, text="", bg=BG_HDR).grid(
+            row=0, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
 
         # Header row 1 — sub-channel names
         tk.Label(parent, text="", **hkw).grid(
@@ -471,6 +475,8 @@ class App(tk.Tk):
             row=1, column=COL_EMPLOYEE, sticky="nsew", padx=(6, 1), pady=1)
         tk.Label(parent, text="", bg=BG_HDR).grid(
             row=1, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
+        tk.Label(parent, text="", bg=BG_HDR).grid(
+            row=1, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
 
         for row_idx, hour in enumerate(BCAST_HOURS):
             self._build_row(hour, row_idx)
@@ -545,6 +551,10 @@ class App(tk.Tk):
                 w = tk.Label(parent, text="", **ckw)
                 w.grid(row=grid_row, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
                 wlist.append(w)
+            # No clear button on signed rows
+            w = tk.Label(parent, text="", **ckw)
+            w.grid(row=grid_row, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
+            wlist.append(w)
 
         elif is_editable:
             if operators:
@@ -565,6 +575,13 @@ class App(tk.Tk):
                                  sticky="nsew", padx=2, pady=2)
                 wlist.append(signoff_btn)
                 self._scalable_widgets.append((signoff_btn, True))
+                clear_btn = tk.Button(parent, text="🗑️",
+                                      command=lambda h=hour: self._clear_row(h),
+                                      font=font(9), bg=row_bg, fg=SUBTEXT,
+                                      relief="flat", cursor="hand2", padx=2)
+                clear_btn.grid(row=grid_row, column=COL_CLEAR,
+                               sticky="nsew", padx=1, pady=2)
+                wlist.append(clear_btn)
             else:
                 no_op_lbl = tk.Label(parent, text="Add operators first",
                                      font=font(9), fg=YELLOW, anchor="w", padx=4, **ckw)
@@ -572,8 +589,11 @@ class App(tk.Tk):
                                sticky="nsew", padx=1, pady=1)
                 wlist.append(no_op_lbl)
                 self._scalable_widgets.append((no_op_lbl, False))
+                w = tk.Label(parent, text="", **ckw)
+                w.grid(row=grid_row, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
+                wlist.append(w)
         else:
-            for col in (COL_EMPLOYEE, COL_SIGNOFF):
+            for col in (COL_EMPLOYEE, COL_SIGNOFF, COL_CLEAR):
                 w = tk.Label(parent, text="", **ckw)
                 w.grid(row=grid_row, column=col, sticky="nsew", padx=1, pady=1)
                 wlist.append(w)
@@ -634,6 +654,12 @@ class App(tk.Tk):
     def _edit_row(self, hour):
         self._editing_hours.add(hour)
         self._rebuild_row(hour)
+
+    def _clear_row(self, hour):
+        """Reset all channel cells in an unsigned row to Unknown (0)."""
+        for var in self._row_vars.get(hour, {}).values():
+            var.set(0)
+        # ThreeStateCell traces auto-refresh the display — no rebuild needed
 
     def _copy_prev_row(self, hour, hour_idx):
         """Copy channel states and operator from the closest previously signed row."""
