@@ -579,14 +579,16 @@ class App(tk.Tk):
                 clear_frame = tk.Frame(parent, bg=row_bg, width=44)
                 clear_frame.grid(row=grid_row, column=COL_CLEAR,
                                  sticky="nsew", padx=1, pady=1)
-                clear_frame.pack_propagate(False)
+                clear_frame.grid_propagate(False)
+                clear_frame.columnconfigure(0, weight=1)
+                clear_frame.rowconfigure(0, weight=1)
                 wlist.append(clear_frame)
                 clear_btn = tk.Button(clear_frame, text="",
                                       command=lambda h=hour: self._clear_row(h),
                                       font=font(9), bg=row_bg,
                                       relief="flat", bd=0, padx=0, pady=0,
                                       cursor="hand2", anchor="center")
-                clear_btn.pack(fill="both", expand=True)
+                clear_btn.grid(row=0, column=0, sticky="nsew")
                 wlist.append(clear_btn)
                 self._scalable_widgets.append((clear_btn, False))
                 def _sync_clear(*_, _h=hour, _b=clear_btn, _prior=prior):
