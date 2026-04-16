@@ -638,7 +638,7 @@ class App(tk.Tk):
                     normal_bg="#263326", normal_fg=GREEN, hover_bg="#30492e",
                     canvas_bg=BG, radius=8, font_obj=font(9))
                 saved_btn.grid(row=grid_row, column=COL_SIGNOFF,
-                               sticky="nsew", padx=2, pady=2)
+                               sticky="nsew")
                 wlist.append(saved_btn)
                 self._scalable_widgets.append((saved_btn, False))
             else:
@@ -673,7 +673,7 @@ class App(tk.Tk):
                     normal_bg=_so_bg, normal_fg=_so_fg, hover_bg=_so_hover,
                     canvas_bg=BG, radius=8, font_obj=font(9, bold=True))
                 signoff_btn.grid(row=grid_row, column=COL_SIGNOFF,
-                                 sticky="nsew", padx=2, pady=2)
+                                 sticky="nsew")
                 wlist.append(signoff_btn)
                 self._scalable_widgets.append((signoff_btn, True))
                 # Show Save only when cells differ from baseline; always show in edit mode
@@ -731,10 +731,12 @@ class App(tk.Tk):
                 cf.grid_propagate(False)
                 wlist.append(cf)
         else:
-            for col in (COL_EMPLOYEE, COL_SIGNOFF):
-                w = tk.Label(parent, text="", **ckw)
-                w.grid(row=grid_row, column=col, sticky="nsew", padx=1, pady=1)
-                wlist.append(w)
+            w = tk.Label(parent, text="", **ckw)
+            w.grid(row=grid_row, column=COL_EMPLOYEE, sticky="nsew", padx=1, pady=1)
+            wlist.append(w)
+            w = tk.Label(parent, text="", bg=BG)
+            w.grid(row=grid_row, column=COL_SIGNOFF, sticky="nsew")
+            wlist.append(w)
             cf = tk.Frame(parent, bg=BG, width=44)
             cf.grid(row=grid_row, column=COL_CLEAR, sticky="nsew")
             cf.grid_propagate(False)
