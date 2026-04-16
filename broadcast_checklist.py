@@ -254,22 +254,29 @@ class RoundedButton(tk.Canvas):
 
     The canvas background is set to the parent row colour so the corner gaps
     blend into the row rather than showing as a solid square.
+
+    States:
+      "normal"  — drawn and clickable
+      "hidden"  — canvas is blank and not interactive (column width preserved)
     """
 
     def __init__(self, parent, text, command,
                  normal_bg, normal_fg, hover_bg,
+                 hover_text=None, hover_fg=None,
                  canvas_bg=BG_CARD, radius=8, font_obj=None, **kw):
         super().__init__(parent, highlightthickness=0, bg=canvas_bg,
                          cursor="hand2", **kw)
-        self._text      = text
-        self._command   = command
-        self._normal_bg = normal_bg
-        self._normal_fg = normal_fg
-        self._hover_bg  = hover_bg
-        self._radius    = radius
-        self._font      = font_obj
-        self._state     = "normal"
-        self._hovering  = False
+        self._text       = text
+        self._hover_text = hover_text   # None → same text on hover
+        self._command    = command
+        self._normal_bg  = normal_bg
+        self._normal_fg  = normal_fg
+        self._hover_bg   = hover_bg
+        self._hover_fg   = hover_fg or normal_fg
+        self._radius     = radius
+        self._font       = font_obj
+        self._state      = "normal"
+        self._hovering   = False
 
         self.bind("<Configure>", lambda e: self._draw())
         self.bind("<Enter>",     self._on_enter)
@@ -292,11 +299,15 @@ class RoundedButton(tk.Canvas):
     def _draw(self):
         w = self.winfo_width()
         h = self.winfo_height()
-        if w <= 1 or h <= 1:
-            return
         self.delete("all")
-        bg = self._hover_bg if (self._hovering and self._state == "normal") else self._normal_bg
-        r  = max(0, min(self._radius, w // 2 - 2, h // 2 - 2))
+        if w <= 1 or h <= 1 or self._state == "hidden":
+            return
+        hovering = self._hovering and self._state == "normal"
+        bg   = self._hover_bg   if hovering else self._normal_bg
+        fg   = self._hover_fg   if hovering else self._normal_fg
+        text = (self._hover_text if (hovering and self._hover_text is not None)
+                else self._text)
+        r    = max(0, min(self._radius, w // 2 - 2, h // 2 - 2))
         x1, y1, x2, y2 = 2, 2, w - 2, h - 2
         # Four corner arcs + two fill rectangles = solid rounded rect
         self.create_arc(x1,      y1,      x1+2*r,  y1+2*r,  start=90,  extent=90, fill=bg, outline="")
@@ -305,8 +316,8 @@ class RoundedButton(tk.Canvas):
         self.create_arc(x1,      y2-2*r,  x1+2*r,  y2,      start=180, extent=90, fill=bg, outline="")
         self.create_rectangle(x1+r, y1,   x2-r, y2,   fill=bg, outline="")
         self.create_rectangle(x1,   y1+r, x2,   y2-r, fill=bg, outline="")
-        self.create_text(w // 2, h // 2, text=self._text,
-                         fill=self._normal_fg, font=self._font, anchor="center")
+        self.create_text(w // 2, h // 2, text=text,
+                         fill=fg, font=self._font, anchor="center")
 
     def config(self, **kw):
         redraw = False
@@ -318,6 +329,7 @@ class RoundedButton(tk.Canvas):
             self._state = kw.pop("state")
             if self._state != "normal":
                 self._hovering = False
+            super().config(cursor="hand2" if self._state == "normal" else "")
             redraw = True
         if kw:
             super().config(**kw)
@@ -619,15 +631,16 @@ class App(tk.Tk):
             wlist.append(op_lbl)
             self._scalable_widgets.append((op_lbl, False))
             if is_editable:
-                edit_btn = RoundedButton(
-                    parent, text="✏  Edit",
+                saved_btn = RoundedButton(
+                    parent, text="🔒  Saved",
+                    hover_text="✏  Edit",
                     command=lambda h=hour: self._edit_row(h),
                     normal_bg="#263326", normal_fg=GREEN, hover_bg="#30492e",
                     canvas_bg=row_bg, radius=8, font_obj=font(9))
-                edit_btn.grid(row=grid_row, column=COL_SIGNOFF,
-                              sticky="nsew", padx=2, pady=2)
-                wlist.append(edit_btn)
-                self._scalable_widgets.append((edit_btn, False))
+                saved_btn.grid(row=grid_row, column=COL_SIGNOFF,
+                               sticky="nsew", padx=2, pady=2)
+                wlist.append(saved_btn)
+                self._scalable_widgets.append((saved_btn, False))
             else:
                 w = tk.Label(parent, text="", **ckw)
                 w.grid(row=grid_row, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
@@ -649,13 +662,13 @@ class App(tk.Tk):
                 cmb.grid(row=grid_row, column=COL_EMPLOYEE, sticky="ew", padx=2, pady=3)
                 wlist.append(cmb)
                 self._scalable_widgets.append((cmb, False))
-                # Edit mode = re-signing a previously saved row → amber; otherwise red
+                # Edit mode (re-signing) → amber; fresh unsigned row → red
                 if edit_mode:
                     _so_bg, _so_hover, _so_fg = "#2e2800", "#443800", YELLOW
                 else:
                     _so_bg, _so_hover, _so_fg = "#331a1a", "#4a2020", RED
                 signoff_btn = RoundedButton(
-                    parent, text="✔  Sign Off",
+                    parent, text="💾  Save",
                     command=lambda h=hour: self._sign_off_row(h),
                     normal_bg=_so_bg, normal_fg=_so_fg, hover_bg=_so_hover,
                     canvas_bg=row_bg, radius=8, font_obj=font(9, bold=True))
@@ -663,6 +676,19 @@ class App(tk.Tk):
                                  sticky="nsew", padx=2, pady=2)
                 wlist.append(signoff_btn)
                 self._scalable_widgets.append((signoff_btn, True))
+                # Show Save only when cells differ from baseline; always show in edit mode
+                def _sync_save(*_, _h=hour, _b=signoff_btn, _prior=prior, _edit=edit_mode):
+                    try:
+                        has_changes = _edit or any(
+                            v.get() != _prior.get(k, 0)
+                            for k, v in self._row_vars.get(_h, {}).items()
+                        )
+                        _b.config(state="normal" if has_changes else "hidden")
+                    except tk.TclError:
+                        pass
+                for _v in self._row_vars[hour].values():
+                    _v.trace_add("write", _sync_save)
+                _sync_save()
                 clear_frame = tk.Frame(parent, bg=row_bg, width=44)
                 clear_frame.grid(row=grid_row, column=COL_CLEAR,
                                  sticky="nsew", padx=1, pady=1)
