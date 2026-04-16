@@ -633,8 +633,8 @@ class App(tk.Tk):
             self._scalable_widgets.append((op_lbl, False))
             if is_editable:
                 saved_btn = RoundedButton(
-                    parent, text="🔒  Saved",
-                    hover_text="✏  Edit",
+                    parent, text="🔒Saved",
+                    hover_text="✏Edit",
                     command=lambda h=hour: self._edit_row(h),
                     normal_bg="#263326", normal_fg=GREEN, hover_bg="#443800", hover_fg=YELLOW,
                     canvas_bg=BG, radius=8, font_obj=font(9))
@@ -669,7 +669,7 @@ class App(tk.Tk):
                 else:
                     _so_bg, _so_hover, _so_fg = "#331a1a", "#4a2020", RED
                 signoff_btn = RoundedButton(
-                    parent, text="💾  Save",
+                    parent, text="💾Save",
                     command=lambda h=hour: self._sign_off_row(h),
                     normal_bg=_so_bg, normal_fg=_so_fg, hover_bg=_so_hover,
                     canvas_bg=BG, radius=8, font_obj=font(9, bold=True))
@@ -712,9 +712,9 @@ class App(tk.Tk):
                             for k, v in self._row_vars.get(_h, {}).items()
                         )
                         if has_changes:
-                            _b.config(text="🗑️", cursor="hand2", state="normal")
+                            _b.config(text="   🗑️", cursor="hand2", state="normal")
                         else:
-                            _b.config(text="", cursor="", state="disabled")
+                            _b.config(text="    ", cursor="", state="disabled")
                     except tk.TclError:
                         pass
                 for _v in self._row_vars[hour].values():
