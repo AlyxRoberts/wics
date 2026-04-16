@@ -263,7 +263,7 @@ class RoundedButton(tk.Canvas):
     def __init__(self, parent, text, command,
                  normal_bg, normal_fg, hover_bg,
                  hover_text=None, hover_fg=None,
-                 canvas_bg=BG_CARD, radius=8, font_obj=None, **kw):
+                 canvas_bg=BG_CARD, radius=8, text_padx=10, font_obj=None, **kw):
         super().__init__(parent, highlightthickness=0, bg=canvas_bg,
                          width=1, height=1, cursor="hand2", **kw)
         self._text       = text
@@ -274,6 +274,7 @@ class RoundedButton(tk.Canvas):
         self._hover_bg   = hover_bg
         self._hover_fg   = hover_fg or normal_fg
         self._radius     = radius
+        self._text_padx  = text_padx
         self._font       = font_obj
         self._state      = "normal"
         self._hovering   = False
@@ -317,7 +318,8 @@ class RoundedButton(tk.Canvas):
         self.create_rectangle(x1+r, y1,   x2-r, y2,   fill=bg, outline="")
         self.create_rectangle(x1,   y1+r, x2,   y2-r, fill=bg, outline="")
         self.create_text(w // 2, h // 2, text=text,
-                         fill=fg, font=self._font, anchor="center")
+                         fill=fg, font=self._font, anchor="center",
+                         width=max(1, w - 2 * self._text_padx))
 
     def config(self, **kw):
         redraw = False
