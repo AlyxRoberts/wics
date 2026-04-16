@@ -265,7 +265,7 @@ class RoundedButton(tk.Canvas):
                  hover_text=None, hover_fg=None,
                  canvas_bg=BG_CARD, radius=8, font_obj=None, **kw):
         super().__init__(parent, highlightthickness=0, bg=canvas_bg,
-                         cursor="hand2", **kw)
+                         width=1, height=1, cursor="hand2", **kw)
         self._text       = text
         self._hover_text = hover_text   # None → same text on hover
         self._command    = command
