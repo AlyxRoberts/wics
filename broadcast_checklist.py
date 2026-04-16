@@ -582,11 +582,14 @@ class App(tk.Tk):
                 clear_btn.grid(row=grid_row, column=COL_CLEAR,
                                sticky="nsew", padx=1, pady=2)
                 wlist.append(clear_btn)
-                # Show the button only when at least one cell is non-default
-                def _sync_clear(*_, _h=hour, _b=clear_btn):
+                # Show the button only when current values differ from saved DB state
+                def _sync_clear(*_, _h=hour, _b=clear_btn, _prior=prior):
                     try:
-                        has_any = any(v.get() != 0 for v in self._row_vars.get(_h, {}).values())
-                        _b.grid() if has_any else _b.grid_remove()
+                        has_changes = any(
+                            v.get() != _prior.get(k, 0)
+                            for k, v in self._row_vars.get(_h, {}).items()
+                        )
+                        _b.grid() if has_changes else _b.grid_remove()
                     except tk.TclError:
                         pass
                 for _v in self._row_vars[hour].values():
