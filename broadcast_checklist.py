@@ -587,6 +587,7 @@ class App(tk.Tk):
                                       relief="flat", cursor="hand2", anchor="center")
                 clear_btn.pack(fill="both", expand=True)
                 wlist.append(clear_btn)
+                self._scalable_widgets.append((clear_btn, False))
                 def _sync_clear(*_, _h=hour, _b=clear_btn, _prior=prior):
                     try:
                         has_changes = any(
