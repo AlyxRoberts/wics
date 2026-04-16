@@ -550,10 +550,10 @@ class App(tk.Tk):
                 row=0, column=start, columnspan=span, sticky="nsew", padx=(lpad, 1), pady=1)
         tk.Label(parent, text="Employee", font=font(18, bold=True), **hkw).grid(
             row=0, column=COL_EMPLOYEE, sticky="nsew", padx=(6, 1), pady=1)
-        tk.Label(parent, text="", bg=BG_HDR).grid(
-            row=0, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
-        tk.Label(parent, text="", bg=BG_HDR).grid(
-            row=0, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
+        tk.Label(parent, text="", bg=BG).grid(
+            row=0, column=COL_SIGNOFF, sticky="nsew")
+        tk.Label(parent, text="", bg=BG).grid(
+            row=0, column=COL_CLEAR, sticky="nsew")
 
         # Header row 1 — sub-channel names
         tk.Label(parent, text="", **hkw).grid(
@@ -565,10 +565,10 @@ class App(tk.Tk):
                 row=1, column=col_idx, sticky="nsew", padx=(lpad, 1), pady=1)
         tk.Label(parent, text="", **hkw).grid(
             row=1, column=COL_EMPLOYEE, sticky="nsew", padx=(6, 1), pady=1)
-        tk.Label(parent, text="", bg=BG_HDR).grid(
-            row=1, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
-        tk.Label(parent, text="", bg=BG_HDR).grid(
-            row=1, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
+        tk.Label(parent, text="", bg=BG).grid(
+            row=1, column=COL_SIGNOFF, sticky="nsew")
+        tk.Label(parent, text="", bg=BG).grid(
+            row=1, column=COL_CLEAR, sticky="nsew")
 
         for row_idx, hour in enumerate(BCAST_HOURS):
             self._build_row(hour, row_idx)
@@ -636,18 +636,18 @@ class App(tk.Tk):
                     hover_text="✏  Edit",
                     command=lambda h=hour: self._edit_row(h),
                     normal_bg="#263326", normal_fg=GREEN, hover_bg="#30492e",
-                    canvas_bg=row_bg, radius=8, font_obj=font(9))
+                    canvas_bg=BG, radius=8, font_obj=font(9))
                 saved_btn.grid(row=grid_row, column=COL_SIGNOFF,
                                sticky="nsew", padx=2, pady=2)
                 wlist.append(saved_btn)
                 self._scalable_widgets.append((saved_btn, False))
             else:
-                w = tk.Label(parent, text="", **ckw)
-                w.grid(row=grid_row, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
+                w = tk.Label(parent, text="", bg=BG)
+                w.grid(row=grid_row, column=COL_SIGNOFF, sticky="nsew")
                 wlist.append(w)
             # No clear button on signed rows — fixed-width frame keeps column stable
-            cf = tk.Frame(parent, bg=row_bg, width=44)
-            cf.grid(row=grid_row, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
+            cf = tk.Frame(parent, bg=BG, width=44)
+            cf.grid(row=grid_row, column=COL_CLEAR, sticky="nsew")
             cf.grid_propagate(False)
             wlist.append(cf)
 
@@ -671,7 +671,7 @@ class App(tk.Tk):
                     parent, text="💾  Save",
                     command=lambda h=hour: self._sign_off_row(h),
                     normal_bg=_so_bg, normal_fg=_so_fg, hover_bg=_so_hover,
-                    canvas_bg=row_bg, radius=8, font_obj=font(9, bold=True))
+                    canvas_bg=BG, radius=8, font_obj=font(9, bold=True))
                 signoff_btn.grid(row=grid_row, column=COL_SIGNOFF,
                                  sticky="nsew", padx=2, pady=2)
                 wlist.append(signoff_btn)
@@ -689,16 +689,16 @@ class App(tk.Tk):
                 for _v in self._row_vars[hour].values():
                     _v.trace_add("write", _sync_save)
                 _sync_save()
-                clear_frame = tk.Frame(parent, bg=row_bg, width=44)
+                clear_frame = tk.Frame(parent, bg=BG, width=44)
                 clear_frame.grid(row=grid_row, column=COL_CLEAR,
-                                 sticky="nsew", padx=1, pady=1)
+                                 sticky="nsew")
                 clear_frame.grid_propagate(False)
                 clear_frame.columnconfigure(0, weight=1)
                 clear_frame.rowconfigure(0, weight=1)
                 wlist.append(clear_frame)
                 clear_btn = tk.Button(clear_frame, text="",
                                       command=lambda h=hour: self._clear_row(h),
-                                      font=font(9), bg=row_bg,
+                                      font=font(9), bg=BG,
                                       relief="flat", bd=0, padx=0, pady=0,
                                       cursor="hand2", anchor="center")
                 clear_btn.grid(row=0, column=0, sticky="nsew")
@@ -726,8 +726,8 @@ class App(tk.Tk):
                                sticky="nsew", padx=1, pady=1)
                 wlist.append(no_op_lbl)
                 self._scalable_widgets.append((no_op_lbl, False))
-                cf = tk.Frame(parent, bg=row_bg, width=44)
-                cf.grid(row=grid_row, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
+                cf = tk.Frame(parent, bg=BG, width=44)
+                cf.grid(row=grid_row, column=COL_CLEAR, sticky="nsew")
                 cf.grid_propagate(False)
                 wlist.append(cf)
         else:
@@ -735,8 +735,8 @@ class App(tk.Tk):
                 w = tk.Label(parent, text="", **ckw)
                 w.grid(row=grid_row, column=col, sticky="nsew", padx=1, pady=1)
                 wlist.append(w)
-            cf = tk.Frame(parent, bg=row_bg, width=44)
-            cf.grid(row=grid_row, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
+            cf = tk.Frame(parent, bg=BG, width=44)
+            cf.grid(row=grid_row, column=COL_CLEAR, sticky="nsew")
             cf.grid_propagate(False)
             wlist.append(cf)
 
