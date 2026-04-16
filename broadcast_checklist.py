@@ -582,17 +582,18 @@ class App(tk.Tk):
                 clear_btn.grid(row=grid_row, column=COL_CLEAR,
                                sticky="nsew", padx=1, pady=2)
                 wlist.append(clear_btn)
-                # Show/hide by blending fg into bg — keeps column width stable
-                def _sync_clear(*_, _h=hour, _b=clear_btn, _prior=prior, _bg=row_bg):
+                # Show/hide by toggling text — empty flat button is invisible;
+                # widget stays in grid so column width never changes
+                def _sync_clear(*_, _h=hour, _b=clear_btn, _prior=prior):
                     try:
                         has_changes = any(
                             v.get() != _prior.get(k, 0)
                             for k, v in self._row_vars.get(_h, {}).items()
                         )
                         if has_changes:
-                            _b.config(fg=SUBTEXT, cursor="hand2", state="normal")
+                            _b.config(text="🗑️", cursor="hand2", state="normal")
                         else:
-                            _b.config(fg=_bg, cursor="", state="disabled")
+                            _b.config(text="", cursor="", state="disabled")
                     except tk.TclError:
                         pass
                 for _v in self._row_vars[hour].values():
