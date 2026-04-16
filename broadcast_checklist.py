@@ -584,7 +584,8 @@ class App(tk.Tk):
                 clear_btn = tk.Button(clear_frame, text="",
                                       command=lambda h=hour: self._clear_row(h),
                                       font=font(9), bg=row_bg,
-                                      relief="flat", cursor="hand2", anchor="center")
+                                      relief="flat", bd=0, padx=0, pady=0,
+                                      cursor="hand2", anchor="center")
                 clear_btn.pack(fill="both", expand=True)
                 wlist.append(clear_btn)
                 self._scalable_widgets.append((clear_btn, False))
