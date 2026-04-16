@@ -318,8 +318,7 @@ class RoundedButton(tk.Canvas):
         self.create_rectangle(x1+r, y1,   x2-r, y2,   fill=bg, outline="")
         self.create_rectangle(x1,   y1+r, x2,   y2-r, fill=bg, outline="")
         self.create_text(w // 2, h // 2, text=text,
-                         fill=fg, font=self._font, anchor="center",
-                         width=max(1, w - 2 * self._text_padx))
+                         fill=fg, font=self._font, anchor="center")
 
     def config(self, **kw):
         redraw = False
@@ -532,7 +531,7 @@ class App(tk.Tk):
         for c in range(COL_CHAN_START, COL_EMPLOYEE):
             parent.columnconfigure(c, weight=1, minsize=40)
         parent.columnconfigure(COL_EMPLOYEE, weight=2, minsize=86)
-        parent.columnconfigure(COL_SIGNOFF,  weight=0, minsize=80)
+        parent.columnconfigure(COL_SIGNOFF,  weight=0, minsize=110)
         parent.columnconfigure(COL_CLEAR,   weight=0, minsize=44)
 
         # Row weights — headers are compact; 24 data rows share all remaining height
