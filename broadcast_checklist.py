@@ -579,7 +579,7 @@ class App(tk.Tk):
                 clear_frame = tk.Frame(parent, bg=row_bg, width=44)
                 clear_frame.grid(row=grid_row, column=COL_CLEAR,
                                  sticky="nsew", padx=1, pady=1)
-                clear_frame.grid_propagate(False)
+                clear_frame.pack_propagate(False)
                 wlist.append(clear_frame)
                 clear_btn = tk.Button(clear_frame, text="",
                                       command=lambda h=hour: self._clear_row(h),
