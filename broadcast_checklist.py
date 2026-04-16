@@ -247,6 +247,86 @@ class ThreeStateCell(tk.Label):
         self.config(text=sym, fg=fg, bg=bg if bg else self._row_bg)
 
 
+
+# ── RoundedButton ──────────────────────────────────────────────────────────────
+class RoundedButton(tk.Canvas):
+    """Canvas button with rounded corners and a hover highlight.
+
+    The canvas background is set to the parent row colour so the corner gaps
+    blend into the row rather than showing as a solid square.
+    """
+
+    def __init__(self, parent, text, command,
+                 normal_bg, normal_fg, hover_bg,
+                 canvas_bg=BG_CARD, radius=8, font_obj=None, **kw):
+        super().__init__(parent, highlightthickness=0, bg=canvas_bg,
+                         cursor="hand2", **kw)
+        self._text      = text
+        self._command   = command
+        self._normal_bg = normal_bg
+        self._normal_fg = normal_fg
+        self._hover_bg  = hover_bg
+        self._radius    = radius
+        self._font      = font_obj
+        self._state     = "normal"
+        self._hovering  = False
+
+        self.bind("<Configure>", lambda e: self._draw())
+        self.bind("<Enter>",     self._on_enter)
+        self.bind("<Leave>",     self._on_leave)
+        self.bind("<Button-1>",  self._on_click)
+
+    def _on_enter(self, _=None):
+        if self._state == "normal":
+            self._hovering = True
+            self._draw()
+
+    def _on_leave(self, _=None):
+        self._hovering = False
+        self._draw()
+
+    def _on_click(self, _=None):
+        if self._state == "normal" and self._command:
+            self._command()
+
+    def _draw(self):
+        w = self.winfo_width()
+        h = self.winfo_height()
+        if w <= 1 or h <= 1:
+            return
+        self.delete("all")
+        bg = self._hover_bg if (self._hovering and self._state == "normal") else self._normal_bg
+        r  = max(0, min(self._radius, w // 2 - 2, h // 2 - 2))
+        x1, y1, x2, y2 = 2, 2, w - 2, h - 2
+        # Four corner arcs + two fill rectangles = solid rounded rect
+        self.create_arc(x1,      y1,      x1+2*r,  y1+2*r,  start=90,  extent=90, fill=bg, outline="")
+        self.create_arc(x2-2*r,  y1,      x2,      y1+2*r,  start=0,   extent=90, fill=bg, outline="")
+        self.create_arc(x2-2*r,  y2-2*r,  x2,      y2,      start=270, extent=90, fill=bg, outline="")
+        self.create_arc(x1,      y2-2*r,  x1+2*r,  y2,      start=180, extent=90, fill=bg, outline="")
+        self.create_rectangle(x1+r, y1,   x2-r, y2,   fill=bg, outline="")
+        self.create_rectangle(x1,   y1+r, x2,   y2-r, fill=bg, outline="")
+        self.create_text(w // 2, h // 2, text=self._text,
+                         fill=self._normal_fg, font=self._font, anchor="center")
+
+    def config(self, **kw):
+        redraw = False
+        if "font" in kw:
+            self._font = kw.pop("font"); redraw = True
+        if "text" in kw:
+            self._text = kw.pop("text"); redraw = True
+        if "state" in kw:
+            self._state = kw.pop("state")
+            if self._state != "normal":
+                self._hovering = False
+            redraw = True
+        if kw:
+            super().config(**kw)
+        if redraw:
+            self._draw()
+
+    configure = config
+
+
 # ── ScrollFrame ────────────────────────────────────────────────────────────────
 class ScrollFrame(tk.Frame):
     def __init__(self, parent, expand_width=True, **kw):
@@ -539,10 +619,11 @@ class App(tk.Tk):
             wlist.append(op_lbl)
             self._scalable_widgets.append((op_lbl, False))
             if is_editable:
-                edit_btn = tk.Button(parent, text="Edit",
-                                     command=lambda h=hour: self._edit_row(h),
-                                     font=font(9), bg="#263326", fg=GREEN,
-                                     relief="flat", cursor="hand2", padx=6)
+                edit_btn = RoundedButton(
+                    parent, text="✏  Edit",
+                    command=lambda h=hour: self._edit_row(h),
+                    normal_bg="#263326", normal_fg=GREEN, hover_bg="#30492e",
+                    canvas_bg=row_bg, radius=8, font_obj=font(9))
                 edit_btn.grid(row=grid_row, column=COL_SIGNOFF,
                               sticky="nsew", padx=2, pady=2)
                 wlist.append(edit_btn)
@@ -568,10 +649,16 @@ class App(tk.Tk):
                 cmb.grid(row=grid_row, column=COL_EMPLOYEE, sticky="ew", padx=2, pady=3)
                 wlist.append(cmb)
                 self._scalable_widgets.append((cmb, False))
-                signoff_btn = tk.Button(parent, text="Sign Off",
-                                        command=lambda h=hour: self._sign_off_row(h),
-                                        font=font(9, bold=True), bg="#331a1a", fg=RED,
-                                        relief="flat", cursor="hand2", padx=6)
+                # Edit mode = re-signing a previously saved row → amber; otherwise red
+                if edit_mode:
+                    _so_bg, _so_hover, _so_fg = "#2e2800", "#443800", YELLOW
+                else:
+                    _so_bg, _so_hover, _so_fg = "#331a1a", "#4a2020", RED
+                signoff_btn = RoundedButton(
+                    parent, text="✔  Sign Off",
+                    command=lambda h=hour: self._sign_off_row(h),
+                    normal_bg=_so_bg, normal_fg=_so_fg, hover_bg=_so_hover,
+                    canvas_bg=row_bg, radius=8, font_obj=font(9, bold=True))
                 signoff_btn.grid(row=grid_row, column=COL_SIGNOFF,
                                  sticky="nsew", padx=2, pady=2)
                 wlist.append(signoff_btn)
