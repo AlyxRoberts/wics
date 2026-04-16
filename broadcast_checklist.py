@@ -439,7 +439,7 @@ class App(tk.Tk):
             parent.columnconfigure(c, weight=1, minsize=40)
         parent.columnconfigure(COL_EMPLOYEE, weight=2, minsize=86)
         parent.columnconfigure(COL_SIGNOFF,  weight=0, minsize=80)
-        parent.columnconfigure(COL_CLEAR,   weight=0, minsize=36)
+        parent.columnconfigure(COL_CLEAR,   weight=0, minsize=44)
 
         # Row weights — headers are compact; 24 data rows share all remaining height
         parent.rowconfigure(0, weight=0, minsize=20)
@@ -551,10 +551,11 @@ class App(tk.Tk):
                 w = tk.Label(parent, text="", **ckw)
                 w.grid(row=grid_row, column=COL_SIGNOFF, sticky="nsew", padx=1, pady=1)
                 wlist.append(w)
-            # No clear button on signed rows
-            w = tk.Label(parent, text="", **ckw)
-            w.grid(row=grid_row, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
-            wlist.append(w)
+            # No clear button on signed rows — fixed-width frame keeps column stable
+            cf = tk.Frame(parent, bg=row_bg, width=44)
+            cf.grid(row=grid_row, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
+            cf.grid_propagate(False)
+            wlist.append(cf)
 
         elif is_editable:
             if operators:
@@ -575,15 +576,17 @@ class App(tk.Tk):
                                  sticky="nsew", padx=2, pady=2)
                 wlist.append(signoff_btn)
                 self._scalable_widgets.append((signoff_btn, True))
-                clear_btn = tk.Button(parent, text="🗑️",
+                clear_frame = tk.Frame(parent, bg=row_bg, width=44)
+                clear_frame.grid(row=grid_row, column=COL_CLEAR,
+                                 sticky="nsew", padx=1, pady=1)
+                clear_frame.grid_propagate(False)
+                wlist.append(clear_frame)
+                clear_btn = tk.Button(clear_frame, text="",
                                       command=lambda h=hour: self._clear_row(h),
-                                      font=font(9), bg=row_bg, fg=SUBTEXT,
-                                      relief="flat", cursor="hand2", padx=2)
-                clear_btn.grid(row=grid_row, column=COL_CLEAR,
-                               sticky="nsew", padx=1, pady=2)
+                                      font=font(9), bg=row_bg,
+                                      relief="flat", cursor="hand2", anchor="center")
+                clear_btn.pack(fill="both", expand=True)
                 wlist.append(clear_btn)
-                # Show/hide by toggling text — empty flat button is invisible;
-                # widget stays in grid so column width never changes
                 def _sync_clear(*_, _h=hour, _b=clear_btn, _prior=prior):
                     try:
                         has_changes = any(
@@ -606,14 +609,19 @@ class App(tk.Tk):
                                sticky="nsew", padx=1, pady=1)
                 wlist.append(no_op_lbl)
                 self._scalable_widgets.append((no_op_lbl, False))
-                w = tk.Label(parent, text="", **ckw)
-                w.grid(row=grid_row, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
-                wlist.append(w)
+                cf = tk.Frame(parent, bg=row_bg, width=44)
+                cf.grid(row=grid_row, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
+                cf.grid_propagate(False)
+                wlist.append(cf)
         else:
-            for col in (COL_EMPLOYEE, COL_SIGNOFF, COL_CLEAR):
+            for col in (COL_EMPLOYEE, COL_SIGNOFF):
                 w = tk.Label(parent, text="", **ckw)
                 w.grid(row=grid_row, column=col, sticky="nsew", padx=1, pady=1)
                 wlist.append(w)
+            cf = tk.Frame(parent, bg=row_bg, width=44)
+            cf.grid(row=grid_row, column=COL_CLEAR, sticky="nsew", padx=1, pady=1)
+            cf.grid_propagate(False)
+            wlist.append(cf)
 
         self._row_widgets[hour] = wlist
 
