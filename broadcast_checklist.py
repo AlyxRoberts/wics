@@ -636,7 +636,7 @@ class App(tk.Tk):
                     parent, text="🔒  Saved",
                     hover_text="✏  Edit",
                     command=lambda h=hour: self._edit_row(h),
-                    normal_bg="#2e2800", normal_fg=YELLOW, hover_bg="#443800",
+                    normal_bg="#263326", normal_fg=GREEN, hover_bg="#443800", hover_fg=YELLOW,
                     canvas_bg=BG, radius=8, font_obj=font(9))
                 saved_btn.grid(row=grid_row, column=COL_SIGNOFF,
                                sticky="nsew")
